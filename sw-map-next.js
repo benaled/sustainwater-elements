@@ -162,7 +162,7 @@ function rFaq(F) {
 
 function rReads(R, sources, checked) {
   const card = (r) => a(r.href, `<span class="im">${r.svg}</span><span class="tt">${esc(r.title)}</span>`, 'read-card');
-  /* reading cards only when a hub lists some (hubs point at other hubs, not blog posts); the sources box always shows */
+  /* reading cards only when a hub lists some (upgraded blog posts only: the 28 Sep 2026 list); the sources box always shows */
   const list = R && R.length ? `<div class="sect-head" style="margin:0"><h2 class="h3" id="reads-h" style="font-size:28px">Keep reading</h2></div>
   <div class="reads">${R.map(card).join('')}</div>` : '';
   return `<section class="sect" style="padding-top:0"${list ? ' aria-labelledby="reads-h"' : ' aria-label="Sources"'}><div class="wrap" style="display:flex;flex-direction:column;gap:28px">

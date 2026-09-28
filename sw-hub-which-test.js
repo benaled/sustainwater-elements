@@ -162,7 +162,7 @@ function rFaq(F) {
 
 function rReads(R, sources, checked) {
   const card = (r) => a(r.href, `<span class="im">${r.svg}</span><span class="tt">${esc(r.title)}</span>`, 'read-card');
-  /* reading cards only when a hub lists some (hubs point at other hubs, not blog posts); the sources box always shows */
+  /* reading cards only when a hub lists some (upgraded blog posts only: the 28 Sep 2026 list); the sources box always shows */
   const list = R && R.length ? `<div class="sect-head" style="margin:0"><h2 class="h3" id="reads-h" style="font-size:28px">Keep reading</h2></div>
   <div class="reads">${R.map(card).join('')}</div>` : '';
   return `<section class="sect" style="padding-top:0"${list ? ' aria-labelledby="reads-h"' : ' aria-label="Sources"'}><div class="wrap" style="display:flex;flex-direction:column;gap:28px">
@@ -783,7 +783,7 @@ const WT_FAQ = [
   { q: 'What doesn\'t a home test cover?', a: '<p>Nitrate, pH, iron, manganese and enterococci need a lab. A home screen is also not accredited lab confirmation.</p>' },
   { q: 'How often should I test?', a: '<p>Mains water: when something changes, such as a new taste, plumbing work or moving in. Private supplies: we suggest once a year in the same month, plus after heavy rain or work on the supply.</p>' },
   { q: 'Can I test for nitrate at home?', a: `<p>Not with our kits. Nitrate needs a lab; the standard is 50 mg/l ${src('DWI', SU.dwiStd)}. Your council can arrange it for a private supply.</p>` },
-  { q: 'Should I test the water before buying a house?', a: '<p>For an older home, a lead test is worth doing. For a home with a private supply, ask for past results and a council risk assessment, and screen for E. coli, lead and arsenic.</p>' },
+  { q: 'Should I test the water before buying a house?', a: '<p>For an older home, a lead test is worth doing. For a home with a private supply, ask for past results and a council risk assessment, and screen for E. coli, lead and arsenic. See <a href="/post/water-testing-before-buying-a-house-home-kit-or-lab-report">water testing before buying a house</a>.</p>' },
   { q: 'Is a home water test accurate?', a: '<p>It is a reliable first screen for the sample you test, when you follow the instructions. For an exact figure, or to confirm a high result, use a lab.</p>' }
 ];
 
@@ -867,7 +867,12 @@ const CONTENT_WHICH = {
     area: ['housing', 'company', 'hardness', 'fluoride']
   }),
   faq: { title: 'Choosing a water test', intro: 'Short answers to what people ask most.', items: WT_FAQ },
-  reads: [],
+  reads: [
+    { href: '/post/how-to-test-water-quality-without-guessing', title: 'How to test water quality at home, step by step', svg: bigIcon('flask') },
+    { href: '/post/water-testing-before-buying-a-house-home-kit-or-lab-report', title: 'Water testing before buying a house: 5 checks', svg: bigIcon('home') },
+    { href: '/post/testing-tap-water-before-making-baby-formula-what-uk-parents-should-know', title: 'Can babies drink tap water? Formula and pregnancy', svg: bigIcon('drop') },
+    { href: '/post/is-tap-water-safe-to-drink-uk', title: 'Is UK tap water safe to drink? The 2026 evidence', svg: bigIcon('home') }
+  ],
   sources: [
     ['DWI: Domestic water filters and softeners', SU.dwiFilters],
     ['DWI: Illness', SU.dwiIll],

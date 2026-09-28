@@ -162,7 +162,7 @@ function rFaq(F) {
 
 function rReads(R, sources, checked) {
   const card = (r) => a(r.href, `<span class="im">${r.svg}</span><span class="tt">${esc(r.title)}</span>`, 'read-card');
-  /* reading cards only when a hub lists some (hubs point at other hubs, not blog posts); the sources box always shows */
+  /* reading cards only when a hub lists some (upgraded blog posts only: the 28 Sep 2026 list); the sources box always shows */
   const list = R && R.length ? `<div class="sect-head" style="margin:0"><h2 class="h3" id="reads-h" style="font-size:28px">Keep reading</h2></div>
   <div class="reads">${R.map(card).join('')}</div>` : '';
   return `<section class="sect" style="padding-top:0"${list ? ' aria-labelledby="reads-h"' : ' aria-label="Sources"'}><div class="wrap" style="display:flex;flex-direction:column;gap:28px">
@@ -982,7 +982,12 @@ const CONTENT_PWS = {
     intro: 'Short answers, with the regulator\'s own words where it matters.',
     items: PWS_FAQ
   },
-  reads: [],
+  reads: [
+    { href: '/post/is-borehole-water-safe-for-drinking', title: 'Is borehole, well or spring water safe to drink?', svg: bigIcon('drop') },
+    { href: '/post/can-i-drill-a-borehole-in-my-garden', title: 'Can I drill a borehole in my garden? Rules, costs and tests', svg: bigIcon('compass') },
+    { href: '/post/private-water-supply-maintenance', title: 'Borehole water treatment and private supply maintenance', svg: bigIcon('wrench') },
+    { href: '/post/is-rainwater-safe-to-drink', title: 'Can you drink rainwater? What UK households should know', svg: bigIcon('drop') }
+  ],
   sources: [
     ['DWI: Single dwelling supplies', U.dwiSingle],
     ['DWI: Guide for private supply owners/users', U.dwiGuide],

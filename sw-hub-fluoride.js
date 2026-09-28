@@ -162,7 +162,7 @@ function rFaq(F) {
 
 function rReads(R, sources, checked) {
   const card = (r) => a(r.href, `<span class="im">${r.svg}</span><span class="tt">${esc(r.title)}</span>`, 'read-card');
-  /* reading cards only when a hub lists some (hubs point at other hubs, not blog posts); the sources box always shows */
+  /* reading cards only when a hub lists some (upgraded blog posts only: the 28 Sep 2026 list); the sources box always shows */
   const list = R && R.length ? `<div class="sect-head" style="margin:0"><h2 class="h3" id="reads-h" style="font-size:28px">Keep reading</h2></div>
   <div class="reads">${R.map(card).join('')}</div>` : '';
   return `<section class="sect" style="padding-top:0"${list ? ' aria-labelledby="reads-h"' : ' aria-label="Sources"'}><div class="wrap" style="display:flex;flex-direction:column;gap:28px">
@@ -865,7 +865,12 @@ const CONTENT_FLUORIDE = {
     chipOn: 'Fluoride', chipOff: 'Community results'
   }),
   faq: { title: 'Fluoride questions', intro: 'Short answers, with the regulator\'s own words where it matters.', items: FL_FAQ },
-  reads: [],
+  reads: [
+    { href: '/post/what-is-the-level-of-fluoride-in-uk-water', title: 'What is the level of fluoride in UK water?', svg: bigIcon('flask') },
+    { href: '/post/testing-tap-water-before-making-baby-formula-what-uk-parents-should-know', title: 'Can babies drink tap water? Formula and pregnancy', svg: bigIcon('drop') },
+    { href: '/post/how-to-test-water-quality-without-guessing', title: 'How to test water quality at home, step by step', svg: bigIcon('flask') },
+    { href: '/post/is-tap-water-safe-to-drink-uk', title: 'Is UK tap water safe to drink? The 2026 evidence', svg: bigIcon('home') }
+  ],
   sources: [
     ['DWI: Fluoridation of drinking water', F],
     ['Oral Health Foundation: Fluoride', OHF]

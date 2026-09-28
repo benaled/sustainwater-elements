@@ -162,7 +162,7 @@ function rFaq(F) {
 
 function rReads(R, sources, checked) {
   const card = (r) => a(r.href, `<span class="im">${r.svg}</span><span class="tt">${esc(r.title)}</span>`, 'read-card');
-  /* reading cards only when a hub lists some (hubs point at other hubs, not blog posts); the sources box always shows */
+  /* reading cards only when a hub lists some (upgraded blog posts only: the 28 Sep 2026 list); the sources box always shows */
   const list = R && R.length ? `<div class="sect-head" style="margin:0"><h2 class="h3" id="reads-h" style="font-size:28px">Keep reading</h2></div>
   <div class="reads">${R.map(card).join('')}</div>` : '';
   return `<section class="sect" style="padding-top:0"${list ? ' aria-labelledby="reads-h"' : ' aria-label="Sources"'}><div class="wrap" style="display:flex;flex-direction:column;gap:28px">
@@ -867,7 +867,11 @@ const CONTENT_CHLORINE = {
     area: ['company', 'hardness']
   }),
   faq: { title: 'Chlorine questions', intro: 'Short answers, with the DWI\'s own words where it matters.', items: CL_FAQ },
-  reads: [],
+  reads: [
+    { href: '/post/water-tastes-funny', title: 'Cloudy, brown or funny-tasting tap water? A symptom guide', svg: bigIcon('drop') },
+    { href: '/post/is-tap-water-safe-to-drink-uk', title: 'Is UK tap water safe to drink? The 2026 evidence', svg: bigIcon('home') },
+    { href: '/post/how-to-test-water-quality-without-guessing', title: 'How to test water quality at home, step by step', svg: bigIcon('flask') }
+  ],
   sources: [
     ['DWI: Chlorine', C],
     ['DWI: Taste and odour in drinking water', SU.dwiTaste],
