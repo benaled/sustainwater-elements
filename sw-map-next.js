@@ -847,11 +847,11 @@ function renderMapPanel(c) {
     <div class="mx-alert-box" data-mx="alert-box">
       <form class="mx-alert-form" data-mx-alert novalidate>
         <div class="mx-field"><label for="mx-a-name">First name</label><input id="mx-a-name" name="firstName" autocomplete="given-name" maxlength="80"></div>
-        <div class="mx-field"><label for="mx-a-email">Email <span aria-hidden="true">*</span></label><input id="mx-a-email" name="email" type="email" autocomplete="email" inputmode="email" maxlength="254" required></div>
         <div class="mx-field"><label for="mx-a-pc">Postcode <span aria-hidden="true">*</span></label><input id="mx-a-pc" name="postcode" autocomplete="postal-code" maxlength="8" placeholder="e.g. SY23 1AB" required><span class="mx-help">Used to tell you when new test results are added near you.</span></div>
         <div class="mx-hp" aria-hidden="true"><label for="mx-a-web">Leave this empty</label><input id="mx-a-web" name="website" tabindex="-1" autocomplete="off"></div>
         <label class="mx-check"><input type="checkbox" name="consent" required><span>I want to subscribe to your mailing list. <span aria-hidden="true">*</span></span></label>
-        <button class="btn btn--primary mx-alert-btn" type="submit">Subscribe</button>
+        <p class="mx-help mx-member-note">Alerts go to the email on your free SustainWater account. New here? You’ll join in the next step.</p>
+        <button class="btn btn--primary mx-alert-btn" type="submit">Get alerts</button>
         <p class="mx-form-msg" data-mx="alert-msg" role="status" aria-live="polite"></p>
       </form>
     </div>
@@ -878,7 +878,7 @@ function renderMapPanel(c) {
   ${rLadder(c.ladder, P)}
   <section class="sect sect--ink" id="add-result" aria-labelledby="add-h"><div class="wrap"><div class="routes routes--2">
     <div class="route route--kit"><span class="k">Already tested your water?</span><span class="t" id="add-h">Add your result to the map</span><p>Help build a clearer local picture, and get 10% off your next order.*</p><div class="btn-row" style="margin-top:auto">${btn('/test-result-form', 'Add my result', 'white btn--sm', true)}</div><span class="small" style="color:rgba(255,255,255,.7)">*Available when you upload a valid result from a SustainWater test.</span></div>
-    <div class="route"><span class="k">Stay informed</span><span class="t">Alerts for your area</span><p>Be told when new test results are added near you. It takes one email address and your postcode.</p><div class="btn-row"><button type="button" class="btn btn--white btn--sm" data-go="mx-alerts">Get alerts</button>${btn('/result-interpretation-centre', 'Understand a result', 'ghost btn--sm')}</div></div>
+    <div class="route"><span class="k">Stay informed</span><span class="t">Alerts for your area</span><p>Be told when new test results are added near you. Join free, then add your postcode.</p><div class="btn-row"><button type="button" class="btn btn--white btn--sm" data-go="mx-alerts">Get alerts</button>${btn('/result-interpretation-centre', 'Understand a result', 'ghost btn--sm')}</div></div>
   </div></div></section>
 
   <section class="sect mx-sect" id="mx-guide" aria-labelledby="mx-guide-h"><div class="wrap">
@@ -1115,7 +1115,7 @@ function mxRevealHalf(host) {
 
 /* alerts form: states come back from page code as the "subscribestate" attribute */
 const MX_ALERT_ERR = {
-  email: 'Please enter a valid email address.',
+  login: 'Please join or log in to get alerts.',
   postcode: 'Please enter your postcode, like SY23 1AB (or just SY23).',
   consent: 'Please tick the box to subscribe.',
   server: 'Sorry, that didn’t go through. Please try again in a moment.'
@@ -1133,10 +1133,12 @@ function mxAlertState(root, st) {
     host._mxAlertTimer = setTimeout(() => mxAlertState(root, { status: 'error', error: 'server' }), 15000);
     return;
   }
-  btnEl.disabled = false; btnEl.textContent = 'Subscribe';
+  /* page code asks non-members to join or log in first (Wix's own window) */
+  if (st.status === 'login') { btnEl.disabled = true; btnEl.textContent = 'Join free or log in…'; msg.textContent = ''; msg.className = 'mx-form-msg'; return; }
+  btnEl.disabled = false; btnEl.textContent = 'Get alerts';
   if (st.status === 'ok') {
     const pc = mxPc(form.postcode.value);
-    box.innerHTML = `<div class="mx-alert-done" tabindex="-1">${icon('circleCheck', 2)}<div><b>You’re on the list${pc ? ` for ${esc(pc)}` : ''}.</b><p>We’ll email you when a new result is added near you. Check your inbox (and spam folder) for our emails.</p></div></div>`;
+    box.innerHTML = `<div class="mx-alert-done" tabindex="-1">${icon('circleCheck', 2)}<div><b>You’re on the list${pc ? ` for ${esc(pc)}` : ''}.</b><p>We’ll email the address on your account when a new result is added near you. Check your inbox (and spam folder) for our emails.</p></div></div>`;
     const done = box.querySelector('.mx-alert-done'); if (done) done.focus({ preventScroll: true });
     return;
   }
@@ -1188,15 +1190,13 @@ function mapPanelReady(root) {
     const af = e.target.closest('form[data-mx-alert]');
     if (!af) return;
     e.preventDefault();
-    const email = String(af.email.value || '').trim();
     const pc = mxPc(af.postcode.value);
     const fail = (key, field) => { mxAlertState(root, { status: 'error', error: key }); if (field) field.focus(); };
-    if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/.test(email)) return fail('email', af.email);
     if (!mxPcOk(pc)) return fail('postcode', af.postcode);
     if (!af.consent.checked) return fail('consent', af.consent);
     af.postcode.value = pc;
     mxAlertState(root, { status: 'sending' });
-    mxSend(root, { action: 'subscribe', data: { firstName: String(af.firstName.value || '').trim(), email, postcode: pc, consent: true, website: af.website.value || '', source: 'water-testing-map' } });
+    mxSend(root, { action: 'subscribe', data: { firstName: String(af.firstName.value || '').trim(), postcode: pc, consent: true, website: af.website.value || '', source: 'water-testing-map' } });
   });
   root.addEventListener('submit', (e) => {
     const f = e.target.closest('form[data-mx-form]');
