@@ -356,8 +356,11 @@ function wire(root, c) {
   root.addEventListener('click', (e) => {
     const m = e.target.closest('[data-member]');
     if (!m) return;
+    if (m.disabled) return;
     const tool = m.closest('[data-tool]');
-    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null } }));
+    root._memberBtn = m;
+    const data = (tool && tool._emailData) || root.host._emailData || null;
+    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null, data } }));
   });
   // scroll-linked states
   if ('IntersectionObserver' in window) {
@@ -397,6 +400,9 @@ function applyPrices(root, prices) {
 }
 
 const TOOLS = {};
+/* an answer from a tick-all-that-apply step is a list; from a single-choice step, a number */
+const picked = (v, i) => (Array.isArray(v) ? v.includes(i) : v === i);
+const pickedAny = (v, list) => list.some(i => picked(v, i));
 
 /* Shared tap-through tool (planner, risk checks, finders, decoders). Runs in the browser; answers are not stored or sent.
    cfg: { id, name, steps: [{ q, o: [options], hint?, postcode? }], result(ans, ctx) -> { title, band?, rows, extra?, kit, lines },
@@ -414,7 +420,7 @@ function quiz(el, c, cfg) {
   function renderQ() {
     const raw = Q[step];
     /* a step's question and options can depend on earlier answers */
-    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : raw.hint };
+    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : (raw.hint || (raw.multi ? 'Tick all that apply.' : '')) };
     const chosen = ans[step];
     const shown = Q.map((_, i) => i).filter(i => !skipped(i));
     const head = `<div class="step-meta"><span>Step ${shown.indexOf(step) + 1} of ${shown.length}</span><span>${esc(cfg.name)}</span></div>
@@ -453,6 +459,9 @@ function quiz(el, c, cfg) {
       <div class="tool-nav"><button type="button" class="linkbtn" data-act="restart">Start again</button><span class="btn-row" style="gap:8px">${memberBtn('email-result', cfg.memberLabel || 'Email me this')}<button type="button" class="btn btn--secondary btn--sm member-off" data-act="copy">${esc(cfg.copyLabel || 'Copy my result')}</button></span></div>`;
     const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
     el._planText = [cfg.textTitle || cfg.name].concat(r.lines || r.rows.map(x => x[0] + ': ' + strip(x[1]))).concat(k ? ['Kit: ' + k.name + ' ' + location.origin + k.url] : []).join('\n');
+    /* what "Email me this" sends: the headline, one line per row, the notes and the kit */
+    const notes = []; { const d = document.createElement('div'); d.innerHTML = r.extra || ''; d.querySelectorAll('.plan-note, p').forEach(n => { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) notes.push('Note: ' + t); }); }
+    el._emailData = { headline: [r.band ? r.band[1] : '', r.title].filter(Boolean).join(': '), lines: r.rows.map(x => x[0].charAt(0) + x[0].slice(1).toLowerCase() + ': ' + strip(x[1])).concat(notes), kit: k ? { name: k.name, url: k.url } : null };
     if (el._prices) applyPrices(el, el._prices);
   }
 
@@ -489,11 +498,13 @@ function quiz(el, c, cfg) {
       const i = Number(m.getAttribute('data-multi'));
       const cur = Array.isArray(ans[step]) ? ans[step].slice() : [];
       const at = cur.indexOf(i);
-      if (at >= 0) cur.splice(at, 1); else cur.push(i);
-      cur.sort((x, y) => x - y);
-      ans[step] = cur;
-      m.setAttribute('aria-pressed', at < 0);
-      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = cur.length === 0;
+      /* "none of these" style options (excl) can't be ticked with the others */
+      const excl = Q[step].excl || [];
+      const next = at >= 0 ? cur.filter(x => x !== i) : (excl.includes(i) ? [i] : cur.filter(x => !excl.includes(x)).concat(i));
+      next.sort((x, y) => x - y);
+      ans[step] = next;
+      el.querySelectorAll('[data-multi]').forEach(b => b.setAttribute('aria-pressed', next.includes(Number(b.getAttribute('data-multi')))));
+      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = next.length === 0;
       return;
     }
     const o = e.target.closest('[data-opt]');
@@ -544,12 +555,29 @@ function fromUrl(root, c) {
   }
 }
 
-/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root) */
+/* "Email me this": page code answers each click with the host attribute "memberstate" ({ status, message }).
+   sending/login: the button waits; sent: confirms; error: says why; idle: back to normal (sign-up window closed). */
+const MEMBER_MSG = { sending: 'Sending…', login: 'Join free or log in…', sent: 'Sent. Check your inbox', error: 'Couldn’t send. Please try again' };
+function memberState(root, val) {
+  let st; try { st = JSON.parse(val); } catch (e) { return; }
+  const b = root._memberBtn;
+  if (!b || !b.isConnected) return;
+  if (b._label == null) b._label = b.textContent;
+  clearTimeout(b._memberT);
+  const back = (ms) => { b._memberT = setTimeout(() => { b.textContent = b._label; b.disabled = false; }, ms); };
+  if (st.status === 'sending' || st.status === 'login') { b.disabled = true; b.textContent = MEMBER_MSG[st.status]; back(45000); return; }
+  b.disabled = false;
+  if (st.status === 'sent') { b.textContent = '✓ ' + MEMBER_MSG.sent; back(8000); return; }
+  if (st.status === 'error') { b.textContent = st.message || MEMBER_MSG.error; back(6000); return; }
+  b.textContent = b._label;
+}
+
+/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root), onReady(root, content) after wiring */
 function defineHub(tag, content, css, opts = {}) {
   const FONT_URL = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap';
   const render = opts.render || renderHub;
   class SwHub extends HTMLElement {
-    static get observedAttributes() { return ['prices'].concat(opts.attrs || []); }
+    static get observedAttributes() { return ['prices', 'memberstate'].concat(opts.attrs || []); }
     connectedCallback() {
       if (this.shadowRoot) return;
       /* see :host in the stylesheet: stop the Editor box height leaving a blank gap under the content */
@@ -560,6 +588,7 @@ function defineHub(tag, content, css, opts = {}) {
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${css}</style>${render(content)}`;
       wire(root, content);
+      if (opts.onReady) opts.onReady(root, content);
       this._ready = true;
       this.constructor.observedAttributes.forEach(n => { if (this.getAttribute(n) != null) this.attributeChangedCallback(n, null, this.getAttribute(n)); });
       fromUrl(root, content);
@@ -567,6 +596,7 @@ function defineHub(tag, content, css, opts = {}) {
     attributeChangedCallback(name, _old, val) {
       if (!this._ready || val == null) return;
       if (name === 'prices') { try { applyPrices(this.shadowRoot, JSON.parse(val)); } catch (e) { /* keep the built-in prices */ } return; }
+      if (name === 'memberstate') { memberState(this.shadowRoot, val); return; }
       if (opts.onAttr) opts.onAttr(name, val, this.shadowRoot);
     }
   }
@@ -1046,20 +1076,22 @@ TOOLS.planner = function (el, c) {
       { q: 'Who uses water from this supply?', o: ['Just my household', 'Shared with other homes', 'Tenants or a holiday let', 'A business or public building'] },
       { q: 'Is the water treated?', o: ['UV lamp', 'Filter', 'UV and filter', 'No treatment', 'Not sure'] },
       { q: 'When was it last tested?', o: ['In the last year', '1 to 3 years ago', 'Longer ago, or never', 'Not sure'] },
-      { q: 'Anything happened recently?', o: ['Heavy rain or flooding', 'Work on the supply or treatment', 'Taste, smell or colour change', 'Moving in or buying', 'Nothing unusual'] }
+      { q: 'Anything happened recently?', multi: true, excl: [4], o: ['Heavy rain or flooding', 'Work on the supply or treatment', 'Taste, smell or colour change', 'Moving in or buying', 'Nothing unusual'] }
     ],
     result(ans, ctx) {
       const nation = nationOf(ans, ctx);
       const [source, who, treat, last, event] = [ans[2], ans[3], ans[4], ans[5], ans[6]];
       const recent = last === 0;
       let now, kit;
-      if (event === 2) { now = 'Screen now with the Complete Kit, and tell your council if the change doesn’t clear.'; kit = 'complete'; }
-      else if (event === 0 || event === 1) {
-        if (recent) { now = 'Retest for E. coli now.'; kit = 'ecoli'; }
+      const ev = (i) => picked(event, i);
+      if (ev(2)) { now = 'Screen now with the Complete Kit, and tell your council if the change doesn’t clear.'; kit = 'complete'; }
+      else if (ev(0) || ev(1)) {
+        if (recent && !ev(3)) { now = 'Retest for E. coli now.'; kit = 'ecoli'; }
         else { now = 'Screen now with the Complete Kit. It includes E. coli.'; kit = 'complete'; }
-      } else if (event === 3) { now = 'Screen now with the Complete Kit, and ask the council for a risk assessment.'; kit = 'complete'; }
+      } else if (ev(3)) { now = 'Screen now with the Complete Kit, and ask the council for a risk assessment.'; kit = 'complete'; }
       else if (recent) { now = 'You’re up to date. Your next screen is due in the same month next year.'; kit = 'trio'; }
       else { now = 'Screen now with the Complete Kit.'; kit = 'complete'; }
+      if (ev(3) && !/risk assessment/.test(now)) now += ' As you’re moving in or buying, ask the council for a risk assessment.';
       let then = 'Retest for E. coli after heavy rain, flooding or any work on the supply';
       if (treat === 0 || treat === 2) then += ', and after changing the UV lamp';
       if (treat === 1) then += ', and after changing the filter';

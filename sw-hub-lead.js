@@ -356,8 +356,11 @@ function wire(root, c) {
   root.addEventListener('click', (e) => {
     const m = e.target.closest('[data-member]');
     if (!m) return;
+    if (m.disabled) return;
     const tool = m.closest('[data-tool]');
-    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null } }));
+    root._memberBtn = m;
+    const data = (tool && tool._emailData) || root.host._emailData || null;
+    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null, data } }));
   });
   // scroll-linked states
   if ('IntersectionObserver' in window) {
@@ -397,6 +400,9 @@ function applyPrices(root, prices) {
 }
 
 const TOOLS = {};
+/* an answer from a tick-all-that-apply step is a list; from a single-choice step, a number */
+const picked = (v, i) => (Array.isArray(v) ? v.includes(i) : v === i);
+const pickedAny = (v, list) => list.some(i => picked(v, i));
 
 /* Shared tap-through tool (planner, risk checks, finders, decoders). Runs in the browser; answers are not stored or sent.
    cfg: { id, name, steps: [{ q, o: [options], hint?, postcode? }], result(ans, ctx) -> { title, band?, rows, extra?, kit, lines },
@@ -414,7 +420,7 @@ function quiz(el, c, cfg) {
   function renderQ() {
     const raw = Q[step];
     /* a step's question and options can depend on earlier answers */
-    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : raw.hint };
+    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : (raw.hint || (raw.multi ? 'Tick all that apply.' : '')) };
     const chosen = ans[step];
     const shown = Q.map((_, i) => i).filter(i => !skipped(i));
     const head = `<div class="step-meta"><span>Step ${shown.indexOf(step) + 1} of ${shown.length}</span><span>${esc(cfg.name)}</span></div>
@@ -453,6 +459,9 @@ function quiz(el, c, cfg) {
       <div class="tool-nav"><button type="button" class="linkbtn" data-act="restart">Start again</button><span class="btn-row" style="gap:8px">${memberBtn('email-result', cfg.memberLabel || 'Email me this')}<button type="button" class="btn btn--secondary btn--sm member-off" data-act="copy">${esc(cfg.copyLabel || 'Copy my result')}</button></span></div>`;
     const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
     el._planText = [cfg.textTitle || cfg.name].concat(r.lines || r.rows.map(x => x[0] + ': ' + strip(x[1]))).concat(k ? ['Kit: ' + k.name + ' ' + location.origin + k.url] : []).join('\n');
+    /* what "Email me this" sends: the headline, one line per row, the notes and the kit */
+    const notes = []; { const d = document.createElement('div'); d.innerHTML = r.extra || ''; d.querySelectorAll('.plan-note, p').forEach(n => { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) notes.push('Note: ' + t); }); }
+    el._emailData = { headline: [r.band ? r.band[1] : '', r.title].filter(Boolean).join(': '), lines: r.rows.map(x => x[0].charAt(0) + x[0].slice(1).toLowerCase() + ': ' + strip(x[1])).concat(notes), kit: k ? { name: k.name, url: k.url } : null };
     if (el._prices) applyPrices(el, el._prices);
   }
 
@@ -489,11 +498,13 @@ function quiz(el, c, cfg) {
       const i = Number(m.getAttribute('data-multi'));
       const cur = Array.isArray(ans[step]) ? ans[step].slice() : [];
       const at = cur.indexOf(i);
-      if (at >= 0) cur.splice(at, 1); else cur.push(i);
-      cur.sort((x, y) => x - y);
-      ans[step] = cur;
-      m.setAttribute('aria-pressed', at < 0);
-      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = cur.length === 0;
+      /* "none of these" style options (excl) can't be ticked with the others */
+      const excl = Q[step].excl || [];
+      const next = at >= 0 ? cur.filter(x => x !== i) : (excl.includes(i) ? [i] : cur.filter(x => !excl.includes(x)).concat(i));
+      next.sort((x, y) => x - y);
+      ans[step] = next;
+      el.querySelectorAll('[data-multi]').forEach(b => b.setAttribute('aria-pressed', next.includes(Number(b.getAttribute('data-multi')))));
+      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = next.length === 0;
       return;
     }
     const o = e.target.closest('[data-opt]');
@@ -544,12 +555,29 @@ function fromUrl(root, c) {
   }
 }
 
-/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root) */
+/* "Email me this": page code answers each click with the host attribute "memberstate" ({ status, message }).
+   sending/login: the button waits; sent: confirms; error: says why; idle: back to normal (sign-up window closed). */
+const MEMBER_MSG = { sending: 'Sending…', login: 'Join free or log in…', sent: 'Sent. Check your inbox', error: 'Couldn’t send. Please try again' };
+function memberState(root, val) {
+  let st; try { st = JSON.parse(val); } catch (e) { return; }
+  const b = root._memberBtn;
+  if (!b || !b.isConnected) return;
+  if (b._label == null) b._label = b.textContent;
+  clearTimeout(b._memberT);
+  const back = (ms) => { b._memberT = setTimeout(() => { b.textContent = b._label; b.disabled = false; }, ms); };
+  if (st.status === 'sending' || st.status === 'login') { b.disabled = true; b.textContent = MEMBER_MSG[st.status]; back(45000); return; }
+  b.disabled = false;
+  if (st.status === 'sent') { b.textContent = '✓ ' + MEMBER_MSG.sent; back(8000); return; }
+  if (st.status === 'error') { b.textContent = st.message || MEMBER_MSG.error; back(6000); return; }
+  b.textContent = b._label;
+}
+
+/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root), onReady(root, content) after wiring */
 function defineHub(tag, content, css, opts = {}) {
   const FONT_URL = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap';
   const render = opts.render || renderHub;
   class SwHub extends HTMLElement {
-    static get observedAttributes() { return ['prices'].concat(opts.attrs || []); }
+    static get observedAttributes() { return ['prices', 'memberstate'].concat(opts.attrs || []); }
     connectedCallback() {
       if (this.shadowRoot) return;
       /* see :host in the stylesheet: stop the Editor box height leaving a blank gap under the content */
@@ -560,6 +588,7 @@ function defineHub(tag, content, css, opts = {}) {
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${css}</style>${render(content)}`;
       wire(root, content);
+      if (opts.onReady) opts.onReady(root, content);
       this._ready = true;
       this.constructor.observedAttributes.forEach(n => { if (this.getAttribute(n) != null) this.attributeChangedCallback(n, null, this.getAttribute(n)); });
       fromUrl(root, content);
@@ -567,6 +596,7 @@ function defineHub(tag, content, css, opts = {}) {
     attributeChangedCallback(name, _old, val) {
       if (!this._ready || val == null) return;
       if (name === 'prices') { try { applyPrices(this.shadowRoot, JSON.parse(val)); } catch (e) { /* keep the built-in prices */ } return; }
+      if (name === 'memberstate') { memberState(this.shadowRoot, val); return; }
       if (opts.onAttr) opts.onAttr(name, val, this.shadowRoot);
     }
   }
@@ -946,7 +976,7 @@ TOOLS.leadcheck = function (el, c) {
       { q: 'What does the pipe by your inside stop tap look like?', hint: 'Usually where the water first comes in: in or behind the kitchen cupboards, or in a downstairs toilet.', o: ['Dull grey and soft, maybe a swollen joint', 'Copper: bright, hard, dull brown', 'Plastic: blue, grey or black', 'Iron: dark, very hard, maybe rusty', 'I haven’t looked yet'] },
       { q: 'Has the pipework been replaced since the home was built?', o: ['Yes, all of it', 'Some of it', 'No', 'Not sure'] },
       { q: 'Who drinks the water?', o: ['Includes a baby, a child or someone pregnant', 'Adults only'] },
-      { q: 'Does any of these apply?', o: ['Recent plumbing work or new taps', 'Water often sits unused for hours or days', 'It’s a private supply (well, borehole or spring)', 'None of these'] }
+      { q: 'Do any of these apply?', multi: true, excl: [3], o: ['Recent plumbing work or new taps', 'Water often sits unused for hours or days', 'It’s a private supply (well, borehole or spring)', 'None of these'] }
     ],
     result(ans, ctx) {
       const built = ans[1], pipe = ans[2], replaced = ans[3], who = ans[4], extra = ans[5];
@@ -959,7 +989,7 @@ TOOLS.leadcheck = function (el, c) {
       const rows = [];
       if (level !== 'unlikely') rows.push(['TODAY', `Run the tap before drinking or cooking. ${qi('A washing up bowl full is normally enough to clear the pipe of standing water, although if you have long service pipe you may need to run the tap for longer.', 'DWI', D)}`]);
       if (pipe === 4) rows.push(['CHECK', `Look at the pipe by your inside stop tap. ${qi('Unpainted lead pipes appear dull grey and often have a swollen joint next to the tap.', 'DWI', D)}`]);
-      rows.push(['TEST', extra === 2
+      rows.push(['TEST', picked(extra, 2)
         ? `Screen at the kitchen tap for lead, E. coli and arsenic. On a private supply, the pipes don’t get the dosing that reduces lead in mains water. ${src('DWI', UL.dwiLeadPws)}`
         : `Screen at the kitchen tap with a Lead Test. Your water company can test too: ${qi('you can ask your water company to test the water at your kitchen tap.', 'DWI', D)}`]);
       if (level !== 'unlikely') rows.push(['FIX', `Replace any lead. The supply pipe and indoor plumbing are the owner’s; tell your water company, which is legally required to replace its communication pipe if it is lead and at risk of adding to the lead in your water. ${src('DWI', D)}`]);
@@ -967,11 +997,11 @@ TOOLS.leadcheck = function (el, c) {
       const notes = [];
       if (ctx.housing && ctx.housing.housingText) notes.push(`<b>Your area (${esc(ctx.housing.district)}):</b> ${esc(ctx.housing.housingText)}`);
       if (who === 0) notes.push(`${qi('Those at particular risk are infants (including unborn babies) and children because lead can have an adverse impact on mental development.', 'DWI', D)}`);
-      if (extra === 0) notes.push(`After work on old pipes: ${qi('Flush the tap well for at least 10 minutes after carrying out any work on a lead pipe.', 'DWI', D)} New solder or old brass can add lead too.`);
-      if (extra === 1) notes.push(`Standing water matters: ${qi('Lead from pipework can dissolve into the water whilst it stands in the pipe.', 'DWI', D)}`);
+      if (picked(extra, 0)) notes.push(`After work on old pipes: ${qi('Flush the tap well for at least 10 minutes after carrying out any work on a lead pipe.', 'DWI', D)} New solder or old brass can add lead too.`);
+      if (picked(extra, 1)) notes.push(`Standing water matters: ${qi('Lead from pipework can dissolve into the water whilst it stands in the pipe.', 'DWI', D)}`);
       if (built === 0 && pipe !== 0 && pipe !== 4 && replaced !== 0) notes.push(`A modern pipe at the stop tap doesn’t clear the pipe under the garden. The DWI says older homes may have lead ${qi('underground and/or inside the building.', 'DWI', D)}`);
       const extraHtml = notes.map(n => `<div class="plan-note">${n}</div>`).join('');
-      const kit = extra === 2 ? 'trio' : 'lead';
+      const kit = picked(extra, 2) ? 'trio' : 'lead';
       const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
       const lines = [band[1] + '. ' + title].concat(rows.map(r => r[0] + ': ' + strip(r[1])));
       if (ctx.housing && ctx.housing.housingText) lines.push('Your area (' + ctx.housing.district + '): ' + ctx.housing.housingText);

@@ -356,8 +356,11 @@ function wire(root, c) {
   root.addEventListener('click', (e) => {
     const m = e.target.closest('[data-member]');
     if (!m) return;
+    if (m.disabled) return;
     const tool = m.closest('[data-tool]');
-    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null } }));
+    root._memberBtn = m;
+    const data = (tool && tool._emailData) || root.host._emailData || null;
+    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null, data } }));
   });
   // scroll-linked states
   if ('IntersectionObserver' in window) {
@@ -397,6 +400,9 @@ function applyPrices(root, prices) {
 }
 
 const TOOLS = {};
+/* an answer from a tick-all-that-apply step is a list; from a single-choice step, a number */
+const picked = (v, i) => (Array.isArray(v) ? v.includes(i) : v === i);
+const pickedAny = (v, list) => list.some(i => picked(v, i));
 
 /* Shared tap-through tool (planner, risk checks, finders, decoders). Runs in the browser; answers are not stored or sent.
    cfg: { id, name, steps: [{ q, o: [options], hint?, postcode? }], result(ans, ctx) -> { title, band?, rows, extra?, kit, lines },
@@ -414,7 +420,7 @@ function quiz(el, c, cfg) {
   function renderQ() {
     const raw = Q[step];
     /* a step's question and options can depend on earlier answers */
-    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : raw.hint };
+    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : (raw.hint || (raw.multi ? 'Tick all that apply.' : '')) };
     const chosen = ans[step];
     const shown = Q.map((_, i) => i).filter(i => !skipped(i));
     const head = `<div class="step-meta"><span>Step ${shown.indexOf(step) + 1} of ${shown.length}</span><span>${esc(cfg.name)}</span></div>
@@ -453,6 +459,9 @@ function quiz(el, c, cfg) {
       <div class="tool-nav"><button type="button" class="linkbtn" data-act="restart">Start again</button><span class="btn-row" style="gap:8px">${memberBtn('email-result', cfg.memberLabel || 'Email me this')}<button type="button" class="btn btn--secondary btn--sm member-off" data-act="copy">${esc(cfg.copyLabel || 'Copy my result')}</button></span></div>`;
     const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
     el._planText = [cfg.textTitle || cfg.name].concat(r.lines || r.rows.map(x => x[0] + ': ' + strip(x[1]))).concat(k ? ['Kit: ' + k.name + ' ' + location.origin + k.url] : []).join('\n');
+    /* what "Email me this" sends: the headline, one line per row, the notes and the kit */
+    const notes = []; { const d = document.createElement('div'); d.innerHTML = r.extra || ''; d.querySelectorAll('.plan-note, p').forEach(n => { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) notes.push('Note: ' + t); }); }
+    el._emailData = { headline: [r.band ? r.band[1] : '', r.title].filter(Boolean).join(': '), lines: r.rows.map(x => x[0].charAt(0) + x[0].slice(1).toLowerCase() + ': ' + strip(x[1])).concat(notes), kit: k ? { name: k.name, url: k.url } : null };
     if (el._prices) applyPrices(el, el._prices);
   }
 
@@ -489,11 +498,13 @@ function quiz(el, c, cfg) {
       const i = Number(m.getAttribute('data-multi'));
       const cur = Array.isArray(ans[step]) ? ans[step].slice() : [];
       const at = cur.indexOf(i);
-      if (at >= 0) cur.splice(at, 1); else cur.push(i);
-      cur.sort((x, y) => x - y);
-      ans[step] = cur;
-      m.setAttribute('aria-pressed', at < 0);
-      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = cur.length === 0;
+      /* "none of these" style options (excl) can't be ticked with the others */
+      const excl = Q[step].excl || [];
+      const next = at >= 0 ? cur.filter(x => x !== i) : (excl.includes(i) ? [i] : cur.filter(x => !excl.includes(x)).concat(i));
+      next.sort((x, y) => x - y);
+      ans[step] = next;
+      el.querySelectorAll('[data-multi]').forEach(b => b.setAttribute('aria-pressed', next.includes(Number(b.getAttribute('data-multi')))));
+      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = next.length === 0;
       return;
     }
     const o = e.target.closest('[data-opt]');
@@ -544,12 +555,29 @@ function fromUrl(root, c) {
   }
 }
 
-/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root) */
+/* "Email me this": page code answers each click with the host attribute "memberstate" ({ status, message }).
+   sending/login: the button waits; sent: confirms; error: says why; idle: back to normal (sign-up window closed). */
+const MEMBER_MSG = { sending: 'Sending…', login: 'Join free or log in…', sent: 'Sent. Check your inbox', error: 'Couldn’t send. Please try again' };
+function memberState(root, val) {
+  let st; try { st = JSON.parse(val); } catch (e) { return; }
+  const b = root._memberBtn;
+  if (!b || !b.isConnected) return;
+  if (b._label == null) b._label = b.textContent;
+  clearTimeout(b._memberT);
+  const back = (ms) => { b._memberT = setTimeout(() => { b.textContent = b._label; b.disabled = false; }, ms); };
+  if (st.status === 'sending' || st.status === 'login') { b.disabled = true; b.textContent = MEMBER_MSG[st.status]; back(45000); return; }
+  b.disabled = false;
+  if (st.status === 'sent') { b.textContent = '✓ ' + MEMBER_MSG.sent; back(8000); return; }
+  if (st.status === 'error') { b.textContent = st.message || MEMBER_MSG.error; back(6000); return; }
+  b.textContent = b._label;
+}
+
+/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root), onReady(root, content) after wiring */
 function defineHub(tag, content, css, opts = {}) {
   const FONT_URL = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap';
   const render = opts.render || renderHub;
   class SwHub extends HTMLElement {
-    static get observedAttributes() { return ['prices'].concat(opts.attrs || []); }
+    static get observedAttributes() { return ['prices', 'memberstate'].concat(opts.attrs || []); }
     connectedCallback() {
       if (this.shadowRoot) return;
       /* see :host in the stylesheet: stop the Editor box height leaving a blank gap under the content */
@@ -560,6 +588,7 @@ function defineHub(tag, content, css, opts = {}) {
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${css}</style>${render(content)}`;
       wire(root, content);
+      if (opts.onReady) opts.onReady(root, content);
       this._ready = true;
       this.constructor.observedAttributes.forEach(n => { if (this.getAttribute(n) != null) this.attributeChangedCallback(n, null, this.getAttribute(n)); });
       fromUrl(root, content);
@@ -567,6 +596,7 @@ function defineHub(tag, content, css, opts = {}) {
     attributeChangedCallback(name, _old, val) {
       if (!this._ready || val == null) return;
       if (name === 'prices') { try { applyPrices(this.shadowRoot, JSON.parse(val)); } catch (e) { /* keep the built-in prices */ } return; }
+      if (name === 'memberstate') { memberState(this.shadowRoot, val); return; }
       if (opts.onAttr) opts.onAttr(name, val, this.shadowRoot);
     }
   }
@@ -862,7 +892,8 @@ const CONTENT_WHICH = {
   })
 };
 
-/* Test Finder: source + concern + home age + anything recent -> the kit that fits, why, the guide to read, what it won't cover. */
+/* Test Finder: source + concerns (tick all) + home age + anything recent (tick all) -> the one kit that covers every tick,
+   why, the guides to read, what it won't cover. */
 TOOLS.finder = function (el, c) {
   const HUB = { lead: ['/lead-in-uk-drinking-water', 'Lead guide'], bac: ['/bacteria-e-coli-in-drinking-water', 'Bacteria guide'], taste: ['/taste-smell-problems', 'Symptom Checker'], cl: ['/chlorine-in-uk-tap-water', 'Chlorine guide'], fl: ['/fluoride-in-uk-water', 'Fluoride Checker'], as: ['/arsenic-in-drinking-water', 'Arsenic Risk Check'], pws: ['/private-water-supplies', 'Private Supply Planner'] };
   quiz(el, c, {
@@ -876,32 +907,50 @@ TOOLS.finder = function (el, c) {
     footnote: 'A home screen is a first check, not accredited lab confirmation.',
     steps: [
       { q: 'Where does your water come from?', o: ['Mains, from a water company', 'A private supply: well, borehole or spring', 'Not sure'] },
-      { q: 'What is your main concern?', o: ['General peace of mind', 'Old pipes or lead', 'Bacteria: rain, tanks or flooding', 'A taste, smell or colour', 'Chlorine', 'Fluoride', 'Arsenic or local geology', 'A baby or pregnancy'] },
+      { q: 'What are you worried about?', multi: true, excl: [0], o: ['Nothing specific: general peace of mind', 'Old pipes or lead', 'Bacteria: rain, tanks or flooding', 'A taste, smell or colour', 'Chlorine', 'Fluoride', 'Arsenic or local geology', 'A baby or pregnancy'] },
       { q: 'When was your home built?', o: ['Before 1970', '1970 or later', 'Not sure'] },
-      { q: 'Anything recent?', o: ['Just moved in, or buying', 'Plumbing work or new taps', 'Heavy rain or flooding', 'Nothing in particular'] }
+      { q: 'Anything recent?', multi: true, excl: [3], o: ['Just moved in, or buying', 'Plumbing work or new taps', 'Heavy rain or flooding', 'Nothing in particular'] }
     ],
     result(ans) {
-      const [src_, concern, age, recent] = [ans[0], ans[1], ans[2], ans[3]];
-      const priv = src_ === 1, old = age !== 1;
-      let kit, why, hub, alt = null;
-      if (concern === 3) { kit = priv ? 'complete' : null; why = 'Find the likely cause first: most tastes and smells come from plumbing, fittings or appliances, and the fix is often free.'; hub = HUB.taste; alt = 'complete'; }
-      else if (concern === 4) { kit = 'chlorine'; why = 'Five strips to read the level, compare taps or days, or test a filter before and after.'; hub = HUB.cl; alt = 'clfl'; }
-      else if (concern === 5) { kit = 'fluoride'; why = 'Five strips for your own tap. Your postcode shows your area’s typical level too.'; hub = HUB.fl; alt = 'clfl'; }
-      else if (concern === 6) { kit = 'arsenic'; why = priv ? 'Arsenic comes from the rocks a groundwater source passes through, and varies with depth.' : 'Mains water is treated and tested for arsenic, so a single test is for peace of mind.'; hub = HUB.as; alt = priv ? 'trio' : null; }
-      else if (concern === 2 || recent === 2) { kit = 'ecoli'; why = 'Rain, flooding and tanks are the usual routes for bacteria. E. coli is the one that matters most.'; hub = HUB.bac; alt = priv ? 'trio' : 'complete'; }
-      else if (concern === 1 || (concern === 7 && old && !priv)) { kit = recent === 0 ? 'duo' : 'lead'; why = old ? 'Homes built before 1970 may have lead pipes. Test at the cold kitchen tap.' : 'Lead pipes are unlikely after 1970, but solder and old brass fittings can add lead.'; hub = HUB.lead; alt = recent === 0 ? 'lead' : 'duo'; }
-      else if (priv) { kit = recent === 0 || concern === 7 ? 'complete' : 'trio'; why = 'On a private supply, E. coli, lead and arsenic are the three to screen, at least once a year.'; hub = HUB.pws; alt = kit === 'trio' ? 'complete' : 'trio'; }
-      else if (recent === 0) { kit = old ? 'duo' : 'complete'; why = old ? 'A new-to-you older home: lead and bacteria together.' : 'A first look at everything in a home that is new to you.'; hub = old ? HUB.lead : HUB.bac; alt = 'complete'; }
-      else if (recent === 1) { kit = 'lead'; why = 'New fittings and work on old pipes can raise lead for a while.'; hub = HUB.lead; alt = 'duo'; }
-      else { kit = 'complete'; why = 'When there’s no single worry, one kit covers E. coli, lead, arsenic, chlorine and fluoride.'; hub = old ? HUB.lead : HUB.taste; alt = old ? 'lead' : null; }
-      if (kit === 'duo') why += ' Moving in is also a good time to check for bacteria, so this kit adds E. coli.';
+      const priv = ans[0] === 1, old = ans[2] !== 1;
+      const con = (i) => picked(ans[1], i), rec = (i) => picked(ans[3], i);
       const P = c.products;
-      const title = kit ? `${P[kit].name}` : 'Start with the Symptom Checker';
-      const rows = [['WHY', esc(why)]];
-      if (alt && alt !== kit) rows.push(['OR', `${a(P[alt].url, esc(P[alt].name))}: ${esc(P[alt].tests)}.`]);
-      rows.push(['READ', a(hub[0], esc(hub[1]) + ' →')]);
+      /* every tick adds what it needs tested (lead, bac, as, cl, fl), a reason and a guide */
+      const need = new Set(), why = [], hubs = [];
+      const add = (tests, text, hub) => { tests.forEach(t => need.add(t)); if (text && !why.includes(text)) why.push(text); if (hub && !hubs.includes(hub)) hubs.push(hub); };
+      const ALL = ['lead', 'bac', 'as', 'cl', 'fl'];
+      if (con(1)) add(['lead'], old ? 'Homes built before 1970 may have lead pipes. Test at the cold kitchen tap.' : 'Lead pipes are unlikely after 1970, but solder and old brass fittings can add lead.', HUB.lead);
+      if (con(7)) add(old && !priv ? ['lead'] : ALL, old && !priv ? 'With a baby or pregnancy, lead is the one to rule out in an older home.' : 'With a baby or pregnancy, one kit checks everything.', HUB.lead);
+      if (con(2) || rec(2)) add(['bac'], 'Rain, flooding and tanks are the usual routes for bacteria. E. coli is the one that matters most.', HUB.bac);
+      if (con(6)) add(['as'], priv ? 'Arsenic comes from the rocks a groundwater source passes through, and varies with depth.' : 'Mains water is treated and tested for arsenic, so a single test is for peace of mind.', HUB.as);
+      if (con(4)) add(['cl'], 'Chlorine strips read the level, compare taps or days, or test a filter before and after.', HUB.cl);
+      if (con(5)) add(['fl'], 'Fluoride strips check your own tap. Your postcode shows your area’s typical level too.', HUB.fl);
+      if (rec(1)) add(['lead'], 'New fittings and work on old pipes can raise lead for a while.', HUB.lead);
+      if (rec(0)) add(old ? ['lead', 'bac'] : ALL, old ? 'A new-to-you older home: check lead and bacteria together.' : 'A first look at everything in a home that is new to you.', old ? HUB.lead : HUB.bac);
+      const taste = con(3);
+      if (taste) add([], priv ? 'On a private supply, a new taste, smell or colour means something has changed: screen it.' : 'Find the likely cause of a taste or smell first: most come from plumbing, fittings or appliances, and the fix is often free.', HUB.taste);
+      if (taste && priv) ALL.forEach(t => need.add(t));
+      let fallbackAlt = null;
+      if (!need.size && !taste) {
+        if (priv) add(['lead', 'bac', 'as'], 'On a private supply, E. coli, lead and arsenic are the three to screen, at least once a year.', HUB.pws);
+        else { add(ALL, 'When there’s no single worry, one kit covers E. coli, lead, arsenic, chlorine and fluoride.', old ? HUB.lead : HUB.taste); if (old) fallbackAlt = 'lead'; }
+      }
+      if (priv && !hubs.includes(HUB.pws)) hubs.push(HUB.pws);
+      /* the cheapest single kit that covers every need; the next one up is the alternative */
+      const KITS = [['ecoli', ['bac']], ['lead', ['lead']], ['arsenic', ['as']], ['chlorine', ['cl']], ['fluoride', ['fl']], ['clfl', ['cl', 'fl']], ['duo', ['lead', 'bac']], ['trio', ['lead', 'bac', 'as']], ['complete', ALL]]
+        .filter(k => P[k[0]]).sort((x, y) => P[x[0]].price - P[y[0]].price);
+      const covers = (k) => [...need].every(t => k[1].includes(t));
+      const fits = KITS.filter(covers);
+      const kit = need.size ? (fits[0] || KITS[KITS.length - 1])[0] : null;
+      let alt = kit ? (fallbackAlt || (fits[1] ? fits[1][0] : null)) : 'complete';
+      if (alt === kit) alt = null;
+      const title = kit ? P[kit].name : 'Start with the Symptom Checker';
+      const rows = [['WHY', esc(why.join(' '))]];
+      if (alt) rows.push(['OR', `${a(P[alt].url, esc(P[alt].name))}: ${esc(P[alt].tests)}.`]);
+      rows.push(['READ', a(hubs[0][0], esc(hubs[0][1]) + ' →')]);
+      if (hubs.length > 1) rows.push(['ALSO', hubs.slice(1, 4).map(h => a(h[0], esc(h[1]) + ' →')).join(' · ')]);
       if (priv) rows.push(['LAB', 'Nitrate, pH, iron, manganese and enterococci need a lab. Your council can arrange it.']);
-      if (concern === 7) rows.push(['NOTE', `${qi('Those at particular risk are infants (including unborn babies) and children because lead can have an adverse impact on mental development.', 'DWI', SU.dwiLead)}`]);
+      if (con(7)) rows.push(['NOTE', `${qi('Those at particular risk are infants (including unborn babies) and children because lead can have an adverse impact on mental development.', 'DWI', SU.dwiLead)}`]);
       return { band: ['clear', 'Recommended'], title, rows, kit };
     }
   });

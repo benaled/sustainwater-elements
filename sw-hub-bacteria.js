@@ -356,8 +356,11 @@ function wire(root, c) {
   root.addEventListener('click', (e) => {
     const m = e.target.closest('[data-member]');
     if (!m) return;
+    if (m.disabled) return;
     const tool = m.closest('[data-tool]');
-    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null } }));
+    root._memberBtn = m;
+    const data = (tool && tool._emailData) || root.host._emailData || null;
+    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null, data } }));
   });
   // scroll-linked states
   if ('IntersectionObserver' in window) {
@@ -397,6 +400,9 @@ function applyPrices(root, prices) {
 }
 
 const TOOLS = {};
+/* an answer from a tick-all-that-apply step is a list; from a single-choice step, a number */
+const picked = (v, i) => (Array.isArray(v) ? v.includes(i) : v === i);
+const pickedAny = (v, list) => list.some(i => picked(v, i));
 
 /* Shared tap-through tool (planner, risk checks, finders, decoders). Runs in the browser; answers are not stored or sent.
    cfg: { id, name, steps: [{ q, o: [options], hint?, postcode? }], result(ans, ctx) -> { title, band?, rows, extra?, kit, lines },
@@ -414,7 +420,7 @@ function quiz(el, c, cfg) {
   function renderQ() {
     const raw = Q[step];
     /* a step's question and options can depend on earlier answers */
-    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : raw.hint };
+    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : (raw.hint || (raw.multi ? 'Tick all that apply.' : '')) };
     const chosen = ans[step];
     const shown = Q.map((_, i) => i).filter(i => !skipped(i));
     const head = `<div class="step-meta"><span>Step ${shown.indexOf(step) + 1} of ${shown.length}</span><span>${esc(cfg.name)}</span></div>
@@ -453,6 +459,9 @@ function quiz(el, c, cfg) {
       <div class="tool-nav"><button type="button" class="linkbtn" data-act="restart">Start again</button><span class="btn-row" style="gap:8px">${memberBtn('email-result', cfg.memberLabel || 'Email me this')}<button type="button" class="btn btn--secondary btn--sm member-off" data-act="copy">${esc(cfg.copyLabel || 'Copy my result')}</button></span></div>`;
     const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
     el._planText = [cfg.textTitle || cfg.name].concat(r.lines || r.rows.map(x => x[0] + ': ' + strip(x[1]))).concat(k ? ['Kit: ' + k.name + ' ' + location.origin + k.url] : []).join('\n');
+    /* what "Email me this" sends: the headline, one line per row, the notes and the kit */
+    const notes = []; { const d = document.createElement('div'); d.innerHTML = r.extra || ''; d.querySelectorAll('.plan-note, p').forEach(n => { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) notes.push('Note: ' + t); }); }
+    el._emailData = { headline: [r.band ? r.band[1] : '', r.title].filter(Boolean).join(': '), lines: r.rows.map(x => x[0].charAt(0) + x[0].slice(1).toLowerCase() + ': ' + strip(x[1])).concat(notes), kit: k ? { name: k.name, url: k.url } : null };
     if (el._prices) applyPrices(el, el._prices);
   }
 
@@ -489,11 +498,13 @@ function quiz(el, c, cfg) {
       const i = Number(m.getAttribute('data-multi'));
       const cur = Array.isArray(ans[step]) ? ans[step].slice() : [];
       const at = cur.indexOf(i);
-      if (at >= 0) cur.splice(at, 1); else cur.push(i);
-      cur.sort((x, y) => x - y);
-      ans[step] = cur;
-      m.setAttribute('aria-pressed', at < 0);
-      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = cur.length === 0;
+      /* "none of these" style options (excl) can't be ticked with the others */
+      const excl = Q[step].excl || [];
+      const next = at >= 0 ? cur.filter(x => x !== i) : (excl.includes(i) ? [i] : cur.filter(x => !excl.includes(x)).concat(i));
+      next.sort((x, y) => x - y);
+      ans[step] = next;
+      el.querySelectorAll('[data-multi]').forEach(b => b.setAttribute('aria-pressed', next.includes(Number(b.getAttribute('data-multi')))));
+      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = next.length === 0;
       return;
     }
     const o = e.target.closest('[data-opt]');
@@ -544,12 +555,29 @@ function fromUrl(root, c) {
   }
 }
 
-/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root) */
+/* "Email me this": page code answers each click with the host attribute "memberstate" ({ status, message }).
+   sending/login: the button waits; sent: confirms; error: says why; idle: back to normal (sign-up window closed). */
+const MEMBER_MSG = { sending: 'Sending…', login: 'Join free or log in…', sent: 'Sent. Check your inbox', error: 'Couldn’t send. Please try again' };
+function memberState(root, val) {
+  let st; try { st = JSON.parse(val); } catch (e) { return; }
+  const b = root._memberBtn;
+  if (!b || !b.isConnected) return;
+  if (b._label == null) b._label = b.textContent;
+  clearTimeout(b._memberT);
+  const back = (ms) => { b._memberT = setTimeout(() => { b.textContent = b._label; b.disabled = false; }, ms); };
+  if (st.status === 'sending' || st.status === 'login') { b.disabled = true; b.textContent = MEMBER_MSG[st.status]; back(45000); return; }
+  b.disabled = false;
+  if (st.status === 'sent') { b.textContent = '✓ ' + MEMBER_MSG.sent; back(8000); return; }
+  if (st.status === 'error') { b.textContent = st.message || MEMBER_MSG.error; back(6000); return; }
+  b.textContent = b._label;
+}
+
+/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root), onReady(root, content) after wiring */
 function defineHub(tag, content, css, opts = {}) {
   const FONT_URL = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap';
   const render = opts.render || renderHub;
   class SwHub extends HTMLElement {
-    static get observedAttributes() { return ['prices'].concat(opts.attrs || []); }
+    static get observedAttributes() { return ['prices', 'memberstate'].concat(opts.attrs || []); }
     connectedCallback() {
       if (this.shadowRoot) return;
       /* see :host in the stylesheet: stop the Editor box height leaving a blank gap under the content */
@@ -560,6 +588,7 @@ function defineHub(tag, content, css, opts = {}) {
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${css}</style>${render(content)}`;
       wire(root, content);
+      if (opts.onReady) opts.onReady(root, content);
       this._ready = true;
       this.constructor.observedAttributes.forEach(n => { if (this.getAttribute(n) != null) this.attributeChangedCallback(n, null, this.getAttribute(n)); });
       fromUrl(root, content);
@@ -567,6 +596,7 @@ function defineHub(tag, content, css, opts = {}) {
     attributeChangedCallback(name, _old, val) {
       if (!this._ready || val == null) return;
       if (name === 'prices') { try { applyPrices(this.shadowRoot, JSON.parse(val)); } catch (e) { /* keep the built-in prices */ } return; }
+      if (name === 'memberstate') { memberState(this.shadowRoot, val); return; }
       if (opts.onAttr) opts.onAttr(name, val, this.shadowRoot);
     }
   }
@@ -909,37 +939,40 @@ TOOLS.bacteriacheck = function (el, c) {
     footnote: 'A guide, not medical advice. If someone is unwell, speak to a doctor or call 111.',
     steps: [
       { q: 'Where does your drinking water come from?', o: ['Mains, from a water company', 'A private supply: well, borehole or spring', 'A storage tank in the loft', 'Not sure'] },
-      { q: 'What has happened?', o: ['A home test showed bacteria', 'A council or lab test found E. coli', 'Heavy rain or flooding', 'Work on the supply, tank or UV lamp', 'Someone at home is unwell', 'Nothing: a routine check'] },
+      { q: 'What has happened?', multi: true, excl: [5], o: ['A home test showed bacteria', 'A council or lab test found E. coli', 'Heavy rain or flooding', 'Work on the supply, tank or UV lamp', 'Someone at home is unwell', 'Nothing: a routine check'] },
       { q: 'Who drinks the water?', o: ['Includes a baby, a young child, or someone older or unwell', 'Healthy adults only'] },
       { q: 'Is there a boil water notice?', o: ['Yes', 'No', 'Not sure'] }
     ],
     result(ans) {
       const [src_, event, who, notice] = [ans[0], ans[1], ans[2], ans[3]];
       const mains = src_ === 0, priv = src_ === 1, tank = src_ === 2;
-      const positive = event === 0 || event === 1;
+      const ev = (i) => picked(event, i);
+      const positive = ev(0) || ev(1);
       let band, title;
       if (positive || notice === 0) { band = ['act', 'Act today']; title = 'Don’t drink it untreated, and tell the right people.'; }
-      else if (event === 4) { band = ['act', 'Get advice today']; title = 'See a doctor if you’re worried, and tell your water company.'; }
-      else if (event === 2 || event === 3) { band = ['check', 'Retest now']; title = 'Screen for E. coli before relying on the water.'; }
+      else if (ev(4)) { band = ['act', 'Get advice today']; title = 'See a doctor if you’re worried, and tell your water company.'; }
+      else if (ev(2) || ev(3)) { band = ['check', 'Retest now']; title = 'Screen for E. coli before relying on the water.'; }
       else { band = ['clear', 'Routine check']; title = mains ? 'Mains water rarely has bacteria problems. Check tanks and taps.' : 'Screen once a year, and after rain or work on the supply.'; }
       const rows = [];
       if (positive || notice === 0) rows.push(['TODAY', `Boil drinking water or use bottled water. The DWI says ${qi('You should boil it before you drink it, use it to brush your teeth, make ice cubes, prepare food, clean feeding equipment or give it to your pets.', 'DWI', SU.dwiBoil)}`]);
-      else if (event === 4) rows.push(['TODAY', `${qi('If you believe that your drinking water is causing illness, you should consult a doctor and contact your water company in the first instance.', 'DWI', SU.dwiIll)}`]);
-      else if (event === 2 || event === 3) rows.push(['TODAY', priv ? `Screen for E. coli. We suggest boiling drinking water until you have a clear result: ${qi('heavy rainfall can significantly deteriorate the microbiological quality of various water sources', 'FSS', SU.fss)}.` : 'Screen for E. coli, and run the tap for a minute or two before sampling.']);
-      if (positive || event === 4 || notice === 0) {
+      else if (ev(4)) rows.push(['TODAY', `${qi('If you believe that your drinking water is causing illness, you should consult a doctor and contact your water company in the first instance.', 'DWI', SU.dwiIll)}`]);
+      else if (ev(2) || ev(3)) rows.push(['TODAY', priv ? `Screen for E. coli. We suggest boiling drinking water until you have a clear result: ${qi('heavy rainfall can significantly deteriorate the microbiological quality of various water sources', 'FSS', SU.fss)}.` : 'Screen for E. coli, and run the tap for a minute or two before sampling.']);
+      if ((positive || notice === 0) && ev(4)) rows.push(['UNWELL', `${qi('If you believe that your drinking water is causing illness, you should consult a doctor and contact your water company in the first instance.', 'DWI', SU.dwiIll)}`]);
+      if (!positive && notice !== 0 && ev(4) && (ev(2) || ev(3))) rows.push(['TEST', 'Screen for E. coli too. Rain, flooding and work on the supply are the usual routes for bacteria.']);
+      if (positive || ev(4) || notice === 0) {
         if (mains) rows.push(['TELL', `Your water company. ${qi('Your water company may come to your property and take some water quality samples.', 'DWI', SU.dwiIll)}`]);
-        else if (priv) rows.push(['TELL', `Your council’s environmental health team. ${event === 1 ? qi('If E. coli and/or Enterococci have been found a Notice is likely to be served by the council.', 'North Norfolk DC', SU.nnMicro) : ''}`]);
+        else if (priv) rows.push(['TELL', `Your council’s environmental health team. ${ev(1) ? qi('If E. coli and/or Enterococci have been found a Notice is likely to be served by the council.', 'North Norfolk DC', SU.nnMicro) : ''}`]);
         else rows.push(['TELL', 'Your water company if you’re on mains; your council if it’s a private supply. If you rent, tell your landlord too.']);
       }
-      if (event === 0) rows.push(['CONFIRM', `A home screen is not a lab result. Coliforms can come from ${qi('dirt inside a tap', 'North Norfolk DC', SU.nnMicro)}, so confirm with your water company, council or an accredited lab.`]);
+      if (ev(0)) rows.push(['CONFIRM', `A home screen is not a lab result. Coliforms can come from ${qi('dirt inside a tap', 'North Norfolk DC', SU.nnMicro)}, so confirm with your water company, council or an accredited lab.`]);
       if (tank) rows.push(['CHECK', `The tank lid and screens. A tank needs a lid that ${qi('excludes light and is tightly fitting and securely fastened, so that birds, vermin, and dust cannot get into the water.', 'DWI', SU.dwiTanks)}`]);
-      if (priv && (positive || event === 3)) rows.push(['FIX', `Check the source, treatment and tank, fix what you find, then retest before drinking untreated. A UV lamp ${qi('Can stop working and not be noticed if not checked or alarmed.', 'North Norfolk DC', SU.nnMicro)}`]);
-      if (!positive && event !== 4 && notice !== 0) rows.push(['THEN', priv ? 'Screen at least once a year, in the same month, and after heavy rain, flooding or work on the supply.' : 'Use the cold kitchen tap for drinking. Retest if the taste, smell or colour changes.']);
+      if (priv && (positive || ev(3))) rows.push(['FIX', `Check the source, treatment and tank, fix what you find, then retest before drinking untreated. A UV lamp ${qi('Can stop working and not be noticed if not checked or alarmed.', 'North Norfolk DC', SU.nnMicro)}`]);
+      if (!positive && !ev(4) && notice !== 0) rows.push(['THEN', priv ? 'Screen at least once a year, in the same month, and after heavy rain, flooding or work on the supply.' : 'Use the cold kitchen tap for drinking. Retest if the taste, smell or colour changes.']);
       const notes = [];
       if (who === 0) notes.push(`Making up baby formula? The NHS advice is to ${qi('leave the water to cool for no more than 30 minutes, so that it remains at a temperature of at least 70C', 'NHS', SU.nhsFormula)}.`);
-      if (event === 4) notes.push(`NHS inform says to contact your GP practice urgently if ${qi('you or your child has bloody diarrhoea', 'NHS inform', SU.stec)}. ${qi('Phone 111 if your GP practice is closed.', 'NHS inform', SU.stec)}`);
+      if (ev(4)) notes.push(`NHS inform says to contact your GP practice urgently if ${qi('you or your child has bloody diarrhoea', 'NHS inform', SU.stec)}. ${qi('Phone 111 if your GP practice is closed.', 'NHS inform', SU.stec)}`);
       if (notice === 0) notes.push(`${qi('The water is still safe to shower and bathe in, but make sure it does not get into your mouth.', 'DWI', SU.dwiBoil)}`);
-      const kit = priv && !positive && event !== 2 && event !== 3 ? 'trio' : 'ecoli';
+      const kit = priv && !positive && !ev(2) && !ev(3) ? 'trio' : 'ecoli';
       return { band, title, rows, extra: notes.map(n => `<div class="plan-note">${n}</div>`).join(''), kit };
     }
   });

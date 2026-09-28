@@ -356,8 +356,11 @@ function wire(root, c) {
   root.addEventListener('click', (e) => {
     const m = e.target.closest('[data-member]');
     if (!m) return;
+    if (m.disabled) return;
     const tool = m.closest('[data-tool]');
-    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null } }));
+    root._memberBtn = m;
+    const data = (tool && tool._emailData) || root.host._emailData || null;
+    root.dispatchEvent(new CustomEvent('sw-member-action', { bubbles: true, composed: true, detail: { action: m.getAttribute('data-member'), hub: root.host.localName, district: root.host._district || null, text: tool && tool._planText ? tool._planText : null, data } }));
   });
   // scroll-linked states
   if ('IntersectionObserver' in window) {
@@ -397,6 +400,9 @@ function applyPrices(root, prices) {
 }
 
 const TOOLS = {};
+/* an answer from a tick-all-that-apply step is a list; from a single-choice step, a number */
+const picked = (v, i) => (Array.isArray(v) ? v.includes(i) : v === i);
+const pickedAny = (v, list) => list.some(i => picked(v, i));
 
 /* Shared tap-through tool (planner, risk checks, finders, decoders). Runs in the browser; answers are not stored or sent.
    cfg: { id, name, steps: [{ q, o: [options], hint?, postcode? }], result(ans, ctx) -> { title, band?, rows, extra?, kit, lines },
@@ -414,7 +420,7 @@ function quiz(el, c, cfg) {
   function renderQ() {
     const raw = Q[step];
     /* a step's question and options can depend on earlier answers */
-    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : raw.hint };
+    const cur = { ...raw, q: typeof raw.q === 'function' ? raw.q(ans) : raw.q, o: typeof raw.o === 'function' ? raw.o(ans) : raw.o, hint: typeof raw.hint === 'function' ? raw.hint(ans) : (raw.hint || (raw.multi ? 'Tick all that apply.' : '')) };
     const chosen = ans[step];
     const shown = Q.map((_, i) => i).filter(i => !skipped(i));
     const head = `<div class="step-meta"><span>Step ${shown.indexOf(step) + 1} of ${shown.length}</span><span>${esc(cfg.name)}</span></div>
@@ -453,6 +459,9 @@ function quiz(el, c, cfg) {
       <div class="tool-nav"><button type="button" class="linkbtn" data-act="restart">Start again</button><span class="btn-row" style="gap:8px">${memberBtn('email-result', cfg.memberLabel || 'Email me this')}<button type="button" class="btn btn--secondary btn--sm member-off" data-act="copy">${esc(cfg.copyLabel || 'Copy my result')}</button></span></div>`;
     const strip = (h) => { const d = document.createElement('div'); d.innerHTML = h; return d.textContent.replace(/\s+/g, ' ').trim(); };
     el._planText = [cfg.textTitle || cfg.name].concat(r.lines || r.rows.map(x => x[0] + ': ' + strip(x[1]))).concat(k ? ['Kit: ' + k.name + ' ' + location.origin + k.url] : []).join('\n');
+    /* what "Email me this" sends: the headline, one line per row, the notes and the kit */
+    const notes = []; { const d = document.createElement('div'); d.innerHTML = r.extra || ''; d.querySelectorAll('.plan-note, p').forEach(n => { const t = n.textContent.replace(/\s+/g, ' ').trim(); if (t) notes.push('Note: ' + t); }); }
+    el._emailData = { headline: [r.band ? r.band[1] : '', r.title].filter(Boolean).join(': '), lines: r.rows.map(x => x[0].charAt(0) + x[0].slice(1).toLowerCase() + ': ' + strip(x[1])).concat(notes), kit: k ? { name: k.name, url: k.url } : null };
     if (el._prices) applyPrices(el, el._prices);
   }
 
@@ -489,11 +498,13 @@ function quiz(el, c, cfg) {
       const i = Number(m.getAttribute('data-multi'));
       const cur = Array.isArray(ans[step]) ? ans[step].slice() : [];
       const at = cur.indexOf(i);
-      if (at >= 0) cur.splice(at, 1); else cur.push(i);
-      cur.sort((x, y) => x - y);
-      ans[step] = cur;
-      m.setAttribute('aria-pressed', at < 0);
-      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = cur.length === 0;
+      /* "none of these" style options (excl) can't be ticked with the others */
+      const excl = Q[step].excl || [];
+      const next = at >= 0 ? cur.filter(x => x !== i) : (excl.includes(i) ? [i] : cur.filter(x => !excl.includes(x)).concat(i));
+      next.sort((x, y) => x - y);
+      ans[step] = next;
+      el.querySelectorAll('[data-multi]').forEach(b => b.setAttribute('aria-pressed', next.includes(Number(b.getAttribute('data-multi')))));
+      const nx = el.querySelector('[data-act="next"]'); if (nx) nx.disabled = next.length === 0;
       return;
     }
     const o = e.target.closest('[data-opt]');
@@ -544,12 +555,29 @@ function fromUrl(root, c) {
   }
 }
 
-/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root) */
+/* "Email me this": page code answers each click with the host attribute "memberstate" ({ status, message }).
+   sending/login: the button waits; sent: confirms; error: says why; idle: back to normal (sign-up window closed). */
+const MEMBER_MSG = { sending: 'Sending…', login: 'Join free or log in…', sent: 'Sent. Check your inbox', error: 'Couldn’t send. Please try again' };
+function memberState(root, val) {
+  let st; try { st = JSON.parse(val); } catch (e) { return; }
+  const b = root._memberBtn;
+  if (!b || !b.isConnected) return;
+  if (b._label == null) b._label = b.textContent;
+  clearTimeout(b._memberT);
+  const back = (ms) => { b._memberT = setTimeout(() => { b.textContent = b._label; b.disabled = false; }, ms); };
+  if (st.status === 'sending' || st.status === 'login') { b.disabled = true; b.textContent = MEMBER_MSG[st.status]; back(45000); return; }
+  b.disabled = false;
+  if (st.status === 'sent') { b.textContent = '✓ ' + MEMBER_MSG.sent; back(8000); return; }
+  if (st.status === 'error') { b.textContent = st.message || MEMBER_MSG.error; back(6000); return; }
+  b.textContent = b._label;
+}
+
+/* opts: render (page renderer), attrs (extra attributes to watch), onAttr(name, value, root), onReady(root, content) after wiring */
 function defineHub(tag, content, css, opts = {}) {
   const FONT_URL = 'https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap';
   const render = opts.render || renderHub;
   class SwHub extends HTMLElement {
-    static get observedAttributes() { return ['prices'].concat(opts.attrs || []); }
+    static get observedAttributes() { return ['prices', 'memberstate'].concat(opts.attrs || []); }
     connectedCallback() {
       if (this.shadowRoot) return;
       /* see :host in the stylesheet: stop the Editor box height leaving a blank gap under the content */
@@ -560,6 +588,7 @@ function defineHub(tag, content, css, opts = {}) {
       const root = this.attachShadow({ mode: 'open' });
       root.innerHTML = `<style>${css}</style>${render(content)}`;
       wire(root, content);
+      if (opts.onReady) opts.onReady(root, content);
       this._ready = true;
       this.constructor.observedAttributes.forEach(n => { if (this.getAttribute(n) != null) this.attributeChangedCallback(n, null, this.getAttribute(n)); });
       fromUrl(root, content);
@@ -567,6 +596,7 @@ function defineHub(tag, content, css, opts = {}) {
     attributeChangedCallback(name, _old, val) {
       if (!this._ready || val == null) return;
       if (name === 'prices') { try { applyPrices(this.shadowRoot, JSON.parse(val)); } catch (e) { /* keep the built-in prices */ } return; }
+      if (name === 'memberstate') { memberState(this.shadowRoot, val); return; }
       if (opts.onAttr) opts.onAttr(name, val, this.shadowRoot);
     }
   }
@@ -883,7 +913,7 @@ const CONTENT_TASTE = {
   })
 };
 
-/* Symptom Checker: five taps -> likely cause, what to try, when to call the water company, the test that fits.
+/* Symptom Checker: what you notice (tick all) + four taps -> likely cause of each, what to try, when to call the water company, the test that fits.
    Quoted text is word for word from the linked DWI page. */
 TOOLS.symptoms = function (el, c) {
   const T = SU.dwiTaste;
@@ -912,6 +942,7 @@ TOOLS.symptoms = function (el, c) {
     [`A plumbing fault. ${qi('When the water is brightly coloured, the cause is likely to be water back siphoning from the toilet cistern, made noticeable by a coloured disinfectant block used in the toilet cistern.', 'DWI', SU.dwiBlue)}`,
       `${qi('If this occurs, contact your water supplier as soon as possible', 'DWI', SU.dwiBlue)}. Don't drink it until they have checked.`, true, null]
   ];
+  const SHORT = ['CHLORINE', 'TCP TASTE', 'METALLIC', 'MUSTY', 'EGGS OR SEWAGE', 'PLASTIC OR WOODY', 'SALTY', 'FUEL', 'CLOUDY', 'BROWN OR ORANGE', 'BRIGHT COLOUR'];
   quiz(el, c, {
     id: 'sy',
     name: 'Symptom Checker',
@@ -922,31 +953,36 @@ TOOLS.symptoms = function (el, c) {
     textTitle: 'My water symptom check (SustainWater Symptom Checker)',
     footnote: 'A guide to the likely cause, not a test. If you are worried, contact your water company.',
     steps: [
-      { q: 'What do you notice?', o: ['Chlorine or swimming-pool taste or smell', 'TCP, antiseptic or medicinal', 'Metallic or bitter', 'Musty or earthy', 'Rotten eggs, sewage or stagnant', 'Plastic, rubbery or woody (like a pencil)', 'Salty or chemical', 'Petrol, diesel or fuel', 'Cloudy or white', 'Brown, orange or black', 'Blue, pink or brightly coloured'] },
+      { q: 'What do you notice?', multi: true, o: ['Chlorine or swimming-pool taste or smell', 'TCP, antiseptic or medicinal', 'Metallic or bitter', 'Musty or earthy', 'Rotten eggs, sewage or stagnant', 'Plastic, rubbery or woody (like a pencil)', 'Salty or chemical', 'Petrol, diesel or fuel', 'Cloudy or white', 'Brown, orange or black', 'Blue, pink or brightly coloured'] },
       { q: 'Which taps does it affect?', o: ['Just one tap', 'Every tap in the home', 'Only the hot tap', 'Not sure yet'] },
       { q: 'Do your neighbours have it too?', o: ['Yes, neighbours too', 'No, just us', 'I don’t know'] },
       { q: 'When did it start?', o: ['Today, or in the last day', 'A few days ago or longer', 'It comes and goes', 'After plumbing work, a new appliance or a new tap'] },
       { q: 'Where does your water come from?', o: ['Mains, from a water company', 'A private supply: well, borehole or spring', 'Not sure'] }
     ],
     result(ans) {
-      const [sym, taps, neigh, when, supply] = [ans[0], ans[1], ans[2], ans[3], ans[4]];
-      const s = S[sym];
+      const [taps, neigh, when, supply] = [ans[1], ans[2], ans[3], ans[4]];
+      const syms = (Array.isArray(ans[0]) ? ans[0] : [ans[0]]).filter(i => S[i]);
+      const urgent = syms.some(i => S[i][2]);
       const priv = supply === 1;
       const inHome = taps === 0 || taps === 2 || neigh === 1 || when === 3;
       const wide = neigh === 0 || taps === 1;
       let band, title;
-      if (s[2]) { band = ['act', 'Contact your supplier now']; title = 'Don’t drink it until your water company has checked.'; }
+      if (urgent) { band = ['act', 'Contact your supplier now']; title = 'Don’t drink it until your water company has checked.'; }
       else if (priv) { band = ['check', 'Check the supply']; title = 'On a private supply, a change needs a proper check.'; }
       else if (neigh === 0) { band = ['check', 'Likely the supply']; title = 'It affects neighbours too, so tell your water company.'; }
       else if (inHome) { band = ['clear', 'Likely your plumbing']; title = 'It looks like something in your home. Try the fix below.'; }
       else { band = ['check', 'Worth checking']; title = 'Check other taps and your neighbours to narrow it down.'; }
-      const rows = [['LIKELY', s[0]], ['TRY', s[1]]];
+      /* one symptom: LIKELY + TRY; several: one row each, the urgent ones first */
+      const order = syms.slice().sort((x, y) => Number(S[y][2]) - Number(S[x][2]));
+      const rows = order.length === 1 ? [['LIKELY', S[order[0]][0]], ['TRY', S[order[0]][1]]]
+        : order.map(i => [SHORT[i], `<b>Likely:</b> ${S[i][0]} <b>Try:</b> ${S[i][1]}`]);
       if (taps === 2) rows.push(['HOT TAP', `${qi('Water from the hot tap is not recommended for drinking as it can contain elevated levels of metals, such as copper, which makes the water taste astringent.', 'DWI', T)}`]);
       if (when === 3) rows.push(['RECENT WORK', `New fittings are a common cause. ${qi('Only approved fittings should be used and installed by WaterSafe approved plumbers.', 'DWI', T)}`]);
       if (priv) rows.push(['PRIVATE', 'A new taste, smell or colour on a private supply is a sign something has changed at the source, treatment or tank. We suggest a screen that includes E. coli.']);
-      else if (!s[2] && (wide || when === 1 || when === 2)) rows.push(['CALL', `Your water company if it lasts or is strong. ${qi('If you suddenly notice a particularly bad or strong smell or taste which makes the water unpalatable, you should contact your water company.', 'DWI', T)}`]);
-      const extra = s[2] ? '' : `<div class="plan-note">When you call, the DWI says it helps to give a description, whether it affects other taps or neighbours, and when you first noticed it. ${src('DWI', T)}</div>`;
-      const kit = priv ? 'complete' : s[3];
+      else if (!urgent && (wide || when === 1 || when === 2)) rows.push(['CALL', `Your water company if it lasts or is strong. ${qi('If you suddenly notice a particularly bad or strong smell or taste which makes the water unpalatable, you should contact your water company.', 'DWI', T)}`]);
+      const extra = urgent ? '' : `<div class="plan-note">When you call, the DWI says it helps to give a description, whether it affects other taps or neighbours, and when you first noticed it. ${src('DWI', T)}</div>`;
+      const kits = syms.map(i => S[i][3]).filter(Boolean);
+      const kit = priv || kits.includes('complete') ? 'complete' : (kits[0] || null);
       return { band, title, rows, extra, kit };
     }
   });
