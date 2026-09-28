@@ -1,6 +1,6 @@
-// SustainWater hub: Bacteria and E. coli in drinking water. Wix custom element.
-// Tag name: sw-hub-bacteria  |  Source: public/custom-elements/sw-hub-bacteria.js
-// Built 27 Sep 2026 from hub_build (hub-kit + content/bacteria.js). Do not edit by hand: rebuild instead.
+// SustainWater hub: UK water testing map: your next step. Wix custom element.
+// Tag name: sw-map-next  |  Source: public/custom-elements/sw-map-next.js
+// Built 27 Sep 2026 from hub_build (hub-kit + content/mapnext.js). Do not edit by hand: rebuild instead.
 (function () {
 'use strict';
 /* SustainWater hub kit: shared renderer and behaviours for every hub custom element.
@@ -633,301 +633,88 @@ const routingBlock = (o) => Object.assign({
   ticks: ['Quotes from UK regulators, linked and dated', 'Home screens, not lab certificates', 'Shop links open in a new tab, so this guide stays open']
 }, o);
 
-/* Bacteria and E. coli in drinking water hub: content.
-   Every quoted line is word for word from the linked page, checked 27 Sep 2026.
-   Opinions and suggestions are ours and are worded as such ("we suggest"). */
+/* UK water testing map: "Your next step" section, placed under the map.
+   It shows the area report for the postcode searched on the map (the page passes it in as the "postcode" attribute,
+   or a link carries ?postcode=SY23), then routes to the right hub tool. Community results are not official monitoring. */
 
-const BAC_CHECKED = '27 Sep 2026';
-const BAC_PRODUCTS = pick('ecoli', 'trio', 'complete');
-const KIT_ONE_WHITE_B = KIT_ONE_SVG.replace(/#0046B8/g, '#FFFFFF');
+const MN_PRODUCTS = pick('complete', 'trio', 'lead', 'ecoli');
+const pq = (d) => d ? '?postcode=' + encodeURIComponent(d) : '';
 
-const BAC_HERO_SVG = `<svg viewBox="0 0 480 380" fill="none" stroke="#0046B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Diagram: rain falls near a well, water passes through a UV treatment unit, is stored in a loft tank and reaches the kitchen tap. Each is a place bacteria can get in.">
-<path d="M28 58a14 14 0 0 1 4-27 20 20 0 0 1 38-4 14 14 0 0 1 6 31z"/>
-<path d="M36 70l-5 10M50 70l-5 10M64 70l-5 10" opacity="0.6"/>
-<path d="M0 200 H480"/>
-<path d="M0 300 q20 -8 40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0 t40 0" opacity="0.45"/>
-<rect x="62" y="176" width="40" height="24" rx="3"/>
-<path d="M56 176 H108"/>
-<path d="M76 200 V320 M88 200 V320"/>
-<path d="M102 190 H180"/>
-<rect x="180" y="176" width="50" height="28" rx="6"/>
-<path d="M190 190 H220" opacity="0.6"/>
-<path d="M230 190 H300"/>
-<path d="M290 200 V116 L370 64 L450 116 V200"/>
-<rect x="352" y="88" width="36" height="18" rx="2"/>
-<path d="M300 190 H316 V97 H352" stroke-dasharray="4 5"/>
-<path d="M370 106 V132 H428 V140"/>
-<path d="M428 140 H438"/>
-<path d="M414 150 H454 L450 164 H418 Z"/>
-<path d="M438 146 c-3 4 -3 7 0 8 c3 -1 3 -4 0 -8z" fill="#0046B8"/>
-<text x="30" y="226" font-family="Montserrat, sans-serif" font-size="11" fill="#5E6973" stroke="none">Well</text>
-<text x="186" y="226" font-family="Montserrat, sans-serif" font-size="11" fill="#5E6973" stroke="none">UV lamp</text>
-<text x="344" y="126" font-family="Montserrat, sans-serif" font-size="10" fill="#5E6973" stroke="none">Tank</text>
-</svg>`;
+/* Cards that follow from the area facts. */
+function mapNextCards(r) {
+  const d = r && r.district;
+  const cards = [];
+  if (r && r.pct != null && r.pct >= 40) cards.push({ icon: 'home', title: `Older homes in ${d}`, body: 'Many homes here were built before 1967, when lead pipes were common. Check your home’s lead risk.', cta: 'Lead Risk Check', href: '/lead-in-uk-drinking-water' + pq(d) + '&go=tool', style: 'pop', flag: 'FOR YOUR AREA' });
+  if (r && r.hardness && /hard/i.test(r.hardness[0]) && !/No public/.test(r.hardness[0])) cards.push({ icon: 'drop', title: r.hardness[0], body: 'Hard water changes the taste and leaves scale. What it means, and when a taste is worth checking.', cta: 'Hard water and taste', href: '/taste-smell-problems?go=hardness' });
+  if (r && r.fluoride) cards.push({ icon: 'info', title: r.fluoride.label, body: `${r.fluoride.artificial ? 'This area is fluoridated.' : 'Natural fluoride levels.'} See what that means, and how your tap compares with the limit.`, cta: 'Fluoride Checker', href: '/fluoride-in-uk-water' + pq(d) + '&go=tool' });
+  if (r && r.company && r.company.url) cards.push({ icon: 'compass', title: r.company.name, body: 'Your water company publishes water quality results for your supply. Check your exact address.', cta: 'Their water quality checker', href: r.company.url, ext: true });
+  cards.push({ icon: 'clipboard', title: 'Well, borehole or spring?', body: 'Private supplies need regular testing. Build a plan for yours.', cta: 'Private Supply Planner', href: '/private-water-supplies' + pq(d) + (d ? '&' : '?') + 'go=tool' });
+  cards.push({ icon: 'circleCheck', title: 'Already tested?', body: 'What your result means against the UK standard, and what to do next.', cta: 'Result Decoder', href: '/result-interpretation-centre?go=tool', style: 'ink' });
+  return cards.slice(0, 6);
+}
 
-/* ---------- chapters ---------- */
-const BCH_WHAT = `
-<p class="read">Home and council tests look for bacteria that signal contamination. The legal standard for E. coli is zero: the DWI's standards table lists E. coli at 0 per 100 ml, measured at the consumer's tap ${src('DWI', SU.dwiStd)}.</p>
-<div class="types">
-  <div><b>Coliform bacteria</b>${qi('Coliform bacteria are found widely in the environment.', 'North Norfolk DC', SU.nnMicro)} ${qi('Their presence indicates that the water supply has had some form of general environmental contamination, such as surface run off into a well, dust in a storage tank, or dirt inside a tap.', 'North Norfolk DC', SU.nnMicro)}</div>
-  <div><b>E. coli and enterococci</b>${qi('E. coli and Enterococci are present in human and animal faeces and are pathogens.', 'North Norfolk DC', SU.nnMicro)} ${qi('Their presence also indicates that other harmful pathogens could be in the water.', 'North Norfolk DC', SU.nnMicro)}</div>
-</div>
-<p class="read">Not every E. coli makes people ill, but you can't tell which kind is in your water from a screen. NHS inform says ${qi('Most types of E. coli are harmless and are an important part of a healthy digestive tract. However, some can make you unwell.', 'NHS inform', SU.stec)} One group, STEC, ${qi('can cause severe stomach pain, bloody diarrhoea and kidney failure.', 'NHS inform', SU.stec)}</p>
-${QB('E. coli and Enterococci are present in human and animal faeces and are pathogens. This means that they can make people ill.', 'North Norfolk District Council', 'North Norfolk DC', SU.nnMicro)}`;
-
-const BCH_WHERE = `
-<p class="read">Bacteria get in where water meets the outside world. Tap a number on the diagram at the top of the page, or read the four points below.</p>
-<div class="points">
-  <div class="point" id="point-1"><span class="dot">1</span><span class="t">The source, after rain</span><span class="b">The DWI says ${qi('Wells and springs although derived from groundwater, are very often influenced by surface water, and are considered surface water for the purposes of water quality risks.', 'DWI', SU.dwiProtect)}</span><span class="x">Retest after heavy rain.</span></div>
-  <div class="point" id="point-2"><span class="dot">2</span><span class="t">Treatment</span><span class="b">A UV lamp is ${qi('Very effective if maintained correctly.', 'North Norfolk DC', SU.nnMicro)} But it ${qi('Can stop working and not be noticed if not checked or alarmed.', 'North Norfolk DC', SU.nnMicro)}</span><span class="x">Retest after lamp or filter work.</span></div>
-  <div class="point" id="point-3"><span class="dot">3</span><span class="t">Storage tanks</span><span class="b">A tank needs a lid that ${qi('excludes light and is tightly fitting and securely fastened, so that birds, vermin, and dust cannot get into the water.', 'DWI', SU.dwiTanks)}</span><span class="x">Check the lid and screens.</span></div>
-  <div class="point" id="point-4"><span class="dot">4</span><span class="t">The tap</span><span class="b">Coliforms can come from ${qi('dirt inside a tap', 'North Norfolk DC', SU.nnMicro)}, which is why a careful sample matters.</span><span class="x">Clean the tap before sampling.</span></div>
-</div>
-<p class="read">Rain is the big one for private supplies. Food Standards Scotland notes that ${qi('heavy rainfall can significantly deteriorate the microbiological quality of various water sources', 'FSS', SU.fss)}.</p>
-<div class="inline-cta"><span><b>After heavy rain or flooding?</b> A single E. coli test is the quick retest.</span>${btn(BAC_PRODUCTS.ecoli.url, 'E. coli Test · £15.95', 'primary btn--sm', true, 'data-price-label="ecoli"')}</div>`;
-
-const BCH_MAINS = `
-<p class="read">On mains water, bacteria problems are rare. The DWI says ${qi('It is extremely rare for drinking water to cause illness in England and Wales.', 'DWI', SU.dwiIll)} and ${qi('Tap water in the UK is safe to drink without boiling.', 'DWI', SU.dwiBoil)}</p>
-<p class="read">When something does go wrong, it is usually local: a tank, a tap or the pipes in the building. The DWI explains that in older homes ${qi('this storage tank will provide cold water to upstairs bathrooms but in some properties all of the cold-water taps may be fed from this tank.', 'DWI', SU.dwiTanks)}</p>
-<p class="read">Private supplies are different: nobody treats or tests the water for you unless you ask. If E. coli is confirmed, ${qi('If E. coli and/or Enterococci have been found a Notice is likely to be served by the council.', 'North Norfolk DC', SU.nnMicro)}</p>
-${a('/private-water-supplies', 'The private water supplies guide →', '', 'style="font-weight:600"')}`;
-
-const BCH_POSITIVE = `
-<div class="urgent">
-  <div class="top"><span class="band band--act">${icon('alert', 2)}If bacteria are found</span><span class="t">What to do today</span></div>
-  <ol>
-    <li><b>1. Stop drinking it untreated.</b> Under a boil water notice, the DWI's advice is to ${qi('boil it before you drink it, use it to brush your teeth, make ice cubes, prepare food, clean feeding equipment or give it to your pets', 'DWI', SU.dwiBoil)}. Or use bottled water.</li>
-    <li><b>2. Tell the right people.</b> Mains water: your water company. ${qi('Your water company may come to your property and take some water quality samples.', 'DWI', SU.dwiIll)} Private supply: your council's environmental health team.</li>
-    <li><b>3. Confirm, find the cause, retest.</b> A home screen is not a lab result. Confirm it, check the source, treatment, tank and tap (chapter 02), then retest before drinking untreated.</li>
-  </ol>
-</div>
-<p class="read">Coliforms without E. coli are treated differently. One council explains that ${qi('If only coliform bacteria and/or high colony counts have been confirmed the council will not normally serve a notice or visit to investigate or re-sample', 'North Norfolk DC', SU.nnMicro)}, but it still recommends the same short-term steps. Its options include ${qi('Collect mains water from friends or family. Use clean sealable containers and store in the fridge.', 'North Norfolk DC', SU.nnMicro)}</p>
-<div class="btn-row">${btn('/result-interpretation-centre', 'Read my result', 'primary', true)}${btn('/post/testing-positive-for-e-coli', 'Tested positive for E. coli?', 'secondary')}</div>`;
-
-const BCH_BOIL = `
-<p class="read">Boiling works on germs. The DWI says ${qi('Heating water is one of the best ways to kill or inactivate bacteria, viruses or parasites.', 'DWI', SU.dwiBoil)} ${qi('Boiling water is also effective against parasites such as Cryptosporidium.', 'DWI', SU.dwiBoil)}</p>
-<div class="calendar">
-  <p class="eyebrow" style="margin:0">The DWI's method</p>
-  <p class="h3" style="font-size:20px">${qi('You should boil your water until it reaches a rolling ball.', 'DWI', SU.dwiBoil)}</p>
-  <p class="read" style="margin:0">${qi('Remove the water from the heat and allow it to cool naturally.', 'DWI', SU.dwiBoil)} ${qi('The water should be stored in a clean container, in the fridge and should be discarded if not used within 24 hours.', 'DWI', SU.dwiBoil)}</p>
-</div>
-<p class="read">For washing, ${qi('The water is still safe to shower and bathe in, but make sure it does not get into your mouth.', 'DWI', SU.dwiBoil)} Making up baby formula? The NHS advice is to ${qi('leave the water to cool for no more than 30 minutes, so that it remains at a temperature of at least 70C', 'NHS', SU.nhsFormula)}.</p>`;
-
-const BCH_ILL = `
-<p class="read">If you think the water has made someone ill, the DWI's advice is clear: ${qi('If you believe that your drinking water is causing illness, you should consult a doctor and contact your water company in the first instance.', 'DWI', SU.dwiIll)} On a private supply, tell your council too.</p>
-<p class="read">NHS inform lists ways people catch STEC, including ${qi('drinking contaminated water from inadequately treated water supplies', 'NHS inform', SU.stec)} and ${qi('drinking contaminated water from streams, rivers and lakes', 'NHS inform', SU.stec)}. It says to contact your GP practice urgently if ${qi('you or your child has bloody diarrhoea', 'NHS inform', SU.stec)}, and ${qi('Phone 111 if your GP practice is closed.', 'NHS inform', SU.stec)}</p>
-<p class="note">${icon('info', 2)}<span>This page is not medical advice. If you are worried about someone's health, speak to a doctor or call 111.</span></p>`;
-
-const BCH_SAMPLE = `
-<p class="read">A bacteria screen is only as good as the sample. Coliforms can come from ${qi('dirt inside a tap', 'North Norfolk DC', SU.nnMicro)}, so a dirty tap or a touched cap can give a positive that isn't in your water.</p>
-<ul class="q-list">
-  <li>Follow the kit's instructions exactly, and use the cold kitchen tap unless they say otherwise.</li>
-  <li>Take off any filter, hose or anti-splash fitting, and clean the tap outlet first.</li>
-  <li>Don't touch the inside of the sample pot or its lid.</li>
-  <li>Write down the date, the tap and anything recent: rain, work on the supply, a new tank.</li>
-</ul>
-<p class="read">Our E. coli Test screens one sample for E. coli and coliform bacteria. It is a screen, not an accredited lab test, so confirm a positive before making big decisions.</p>
-${a('/post/e-coli-in-water-sample', 'Read: E. coli in a water sample →', '', 'style="font-weight:600"')}`;
-
-const BCH_FIX = `
-<p class="read">On a private supply, the fix is usually at the source, the treatment or the tank. For a shallow source, one council says ${qi('It is often difficult to prove and stop this type of contamination. Treatment or changing to a deep borehole or mains water is normally the best long term solution.', 'North Norfolk DC', SU.nnMicro)}</p>
-<div class="types">
-  <div><b>UV lamp</b>${qi('UV light inactivates the bacteria.', 'North Norfolk DC', SU.nnMicro)} It ${qi('Needs clear water (low turbidity and colour) to be effective.', 'North Norfolk DC', SU.nnMicro)}</div>
-  <div><b>Chlorination</b>${qi('Provides residual disinfection properties.', 'North Norfolk DC', SU.nnMicro)} But ${qi('Dosing chemicals need careful storage and handling.', 'North Norfolk DC', SU.nnMicro)}</div>
-  <div><b>Tanks</b>${qi('Cleaning and disinfecting existing tank. Ensuring close-fitting lid and gauze on overflow to exclude insects.', 'North Norfolk DC', SU.nnMicro)}</div>
-  <div><b>Well heads</b>${qi('Surround the top of a Well with a raised chamber with a sealed and locked cover.', 'North Norfolk DC', SU.nnMicro)}</div>
-</div>
-<p class="read">We don't sell treatment systems, so this is an overview, not a recommendation. After any fix, retest for E. coli before drinking the water untreated.</p>
-${a('/post/uv-water-treatment-what-to-test-before-and-after-maintenance', 'Read: UV treatment, what to test before and after →', '', 'style="font-weight:600"')}`;
-
-const BCH_TANKS = `
-<p class="read">Many older homes store cold water in the loft. The DWI's view: ${qi('Ideally you should only use a tap connected to the mains water supply for drinking, food preparation or teeth cleaning', 'DWI', SU.dwiTanks)}.</p>
-<p class="read">Not sure which taps are on the tank? ${qi('If you are able to, hold back all the water with your thumb when the tap is fully open, then the tap is likely to be connected to a tank not the mains.', 'DWI', SU.dwiTanks)}</p>
-<p class="read">The DWI ${src('DWI', SU.dwiTanks)} says water in a tank will deteriorate if:</p>
-<ul class="q-list">
-  <li>“There is no lid on the storage tank”</li>
-  <li>“The water becomes warm”</li>
-  <li>“Too much water is stored and turnover is low”</li>
-</ul>
-<p class="read">Renting? ${qi('If you are renting your property privately then your landlord is responsible for these checks.', 'DWI', SU.dwiTanks)}</p>
-${a('/post/is-bathroom-water-safe-to-drink-uk', 'Read: is bathroom water safe to drink? →', '', 'style="font-weight:600"')}`;
-
-const BAC_FAQ = [
-  { q: 'What does E. coli in drinking water mean?', a: `<p>That faecal matter has got into the water somewhere. ${qi('E. coli and Enterococci are present in human and animal faeces and are pathogens.', 'North Norfolk DC', SU.nnMicro)} The legal standard at the tap is zero.</p>` },
-  { q: 'Are coliform bacteria dangerous?', a: `<p>On their own they are a warning sign rather than proof of danger. ${qi('Coliform bacteria are found widely in the environment.', 'North Norfolk DC', SU.nnMicro)} They point to contamination, such as run-off, a dusty tank or a dirty tap, so find and fix the cause.</p>` },
-  { q: 'Is UK tap water safe from bacteria?', a: `<p>Mains water is disinfected and tested. The DWI says ${qi('It is extremely rare for drinking water to cause illness in England and Wales.', 'DWI', SU.dwiIll)} Private supplies, tanks and taps are where problems usually start.</p>` },
-  { q: 'Does boiling water kill E. coli?', a: `<p>Yes. The DWI says boiling means ${qi('any bacteria or viruses that were in your water are killed or deactivated', 'DWI', SU.dwiBoil)}. Bring it to a rolling boil, then let it cool.</p>` },
-  { q: 'Can I shower if E. coli is found?', a: `<p>Under a boil notice, ${qi('The water is still safe to shower and bathe in, but make sure it does not get into your mouth.', 'DWI', SU.dwiBoil)}</p>` },
-  { q: 'How often should a well or borehole be tested for bacteria?', a: '<p>We suggest at least once a year, plus a retest after heavy rain, flooding or any work on the supply. The Private Supply Planner builds a plan for your supply.</p>' + a('/private-water-supplies', 'Open the Private Supply Planner →', '', 'style="font-weight:600"') },
-  { q: 'Can a home test detect E. coli?', a: '<p>Yes, as a first screen. Our E. coli Test screens one sample for E. coli and coliform bacteria. It is not an accredited lab result, so confirm a positive with your council, water company or a lab.</p>' },
-  { q: 'Who do I tell about a positive result?', a: `<p>Mains water: your water company. ${qi('Your water company may come to your property and take some water quality samples.', 'DWI', SU.dwiIll)} Private supply: your council's environmental health team.</p>` }
-];
-
-const CONTENT_BACTERIA = {
-  products: BAC_PRODUCTS,
-  checked: BAC_CHECKED,
-  alert: {
-    icon: 'rain',
-    html: '<b>After heavy rain or flooding?</b> Rain can wash bacteria into wells, springs and boreholes. A quick E. coli retest tells you where you stand.',
-    link: { label: 'Retest for E. coli →', href: BAC_PRODUCTS.ecoli.url }
+const CONTENT_MAPNEXT = {
+  products: MN_PRODUCTS,
+  checked: '28 Sep 2026',
+  map: { mapUrl: null, area: ['housing', 'company', 'hardness', 'fluoride'] },
+  onArea(root, r) {
+    const box = root.querySelector('[data-next]');
+    if (box && r && r.ok) box.innerHTML = mapNextCards(r).map(sitCard).join('');
+    const title = root.getElementById('area-h');
+    if (title && r && r.district) title.textContent = `What we know about ${r.district}`;
   },
-  hero: {
-    crumbs: [{ label: 'Home', href: '/' }, { label: 'Bacteria and E. coli' }],
-    pill: 'E. coli · Coliforms · Boil notices',
-    h1: 'Bacteria and E. coli in drinking water: <em>what a positive means, and what to do</em>',
-    answer: 'On mains water, bacteria problems are rare: the DWI says “It is extremely rare for drinking water to cause illness in England and Wales.” The risk is higher on private supplies, storage tanks and after flooding. E. coli is the one that matters most, because in one council’s words it is “present in human and animal faeces”. If a test finds it, stop drinking the water untreated and tell your water company or council.',
-    sources: [['DWI', SU.dwiIll], ['North Norfolk DC', SU.nnMicro]],
-    checked: BAC_CHECKED,
-    secondary: { label: 'What should I do?', target: 'tool' },
-    ticks: ['Quotes from UK regulators, linked', 'A home screen for E. coli and coliforms', 'Clear next steps if a test is positive'],
-    figure: {
-      label: 'Where bacteria get in',
-      svg: BAC_HERO_SVG,
-      hotspots: [
-        { n: 1, x: 17, y: 40, label: 'The source, after rain' },
-        { n: 2, x: 42.7, y: 38, label: 'Treatment: the UV lamp' },
-        { n: 3, x: 73, y: 24, label: 'Storage tanks' },
-        { n: 4, x: 93, y: 34, label: 'The tap' }
-      ]
-    },
-    floatNote: { k: 'Our suggestion', v: 'Retest after heavy rain or work on the supply' },
-    floatKit: 'ecoli',
-    floatKitLabel: 'Quick retest'
+  concerns: {
+    id: 'concerns',
+    eyebrow: 'Start from your concern',
+    title: 'Every guide has a tool that gives you an answer',
+    intro: 'Pick your worry. Each guide explains it with the regulator’s own words, and its tool tells you what to do next.',
+    cards: [
+      { icon: 'help', title: 'Not sure what to test', body: 'Four taps to the right kit, and what it won’t cover.', cta: 'Test Finder', href: '/which-water-test-do-i-need?go=tool', style: 'pop', flag: 'START HERE' },
+      { icon: 'home', title: 'Lead and old pipes', body: 'How likely lead pipes are in your home, and what to do today.', cta: 'Lead Risk Check', href: '/lead-in-uk-drinking-water?go=tool' },
+      { icon: 'rain', title: 'Bacteria and E. coli', body: 'After rain, a tank or a positive test: what to do and who to tell.', cta: 'Bacteria Next Steps', href: '/bacteria-e-coli-in-drinking-water?go=tool' },
+      { icon: 'drop', title: 'Taste, smell or colour', body: 'The likely cause, what to try, and when to call your water company.', cta: 'Symptom Checker', href: '/taste-smell-problems?go=tool' },
+      { icon: 'compass', title: 'Wells, boreholes, springs', body: 'A testing plan for your supply, and the rules where you live.', cta: 'Private Supply Planner', href: '/private-water-supplies?go=tool' },
+      { icon: 'flask', title: 'Chlorine', body: 'What a strip reading means, and how to cut the taste.', cta: 'Chlorine Reading Check', href: '/chlorine-in-uk-tap-water?go=tool' },
+      { icon: 'info', title: 'Fluoride', body: 'Your area’s typical level, and how your tap compares.', cta: 'Fluoride Checker', href: '/fluoride-in-uk-water?go=tool' },
+      { icon: 'alert', title: 'Arsenic', body: 'Who is at risk, and what to do about a high result.', cta: 'Arsenic Risk Check', href: '/arsenic-in-drinking-water?go=tool', style: 'ink' }
+    ]
   },
-  jump: [['kits', 'Kits'], ['situations', 'Is this you?'], ['tool', 'Next steps'], ['guide', 'The guide'], ['near-you', 'Near you'], ['faq', 'FAQ']],
   ladder: {
-    eyebrow: 'Choose your kit',
-    title: 'Three ways to check for bacteria',
+    eyebrow: 'Ready to test?',
+    title: 'The kits most people start with',
     compare: { label: 'All water tests', href: '/category/all-products' },
     kits: [
-      { key: 'ecoli', badge: 'Quick retest', fig: '1 test', svg: KIT_ONE_WHITE_B, chooseIf: 'Choose this after heavy rain, flooding, tank work or a UV lamp change, or to recheck after a fix.', tags: ['E. coli', 'Coliforms'], note: 'A first screen. Confirm a positive with a lab or your council.' },
-      { key: 'trio', fig: '3 tests', svg: KIT_TRIO_SVG, chooseIf: 'The yearly safety screen for a private supply: E. coli, lead and arsenic.', tag: 'E. coli · lead · arsenic' },
-      { key: 'complete', fig: '13 tests', svg: KIT_TRIO_SVG, chooseIf: 'The full screen: E. coli, lead and arsenic, plus chlorine and fluoride.', tag: '13 tests' }
+      { key: 'complete', badge: 'Best first screen', fig: '13 tests', svg: KIT_BOX_SVG, chooseIf: 'Not sure what to test, just moved in, or want a first look at everything.', note: 'E. coli, lead and arsenic, plus chlorine and fluoride.' },
+      { key: 'trio', fig: '3 tests', svg: KIT_TRIO_SVG, chooseIf: 'The yearly safety screen for a private supply.', tag: 'E. coli · lead · arsenic' },
+      { key: 'lead', fig: '1 test', svg: KIT_ONE_SVG, chooseIf: 'Mains water in a home built before 1970.', tag: 'Lead' }
     ],
-    limits: '<b>What a home screen doesn\'t cover:</b> enterococci and colony counts need a lab. Your council or water company can arrange testing.',
-    limitsTarget: 'sampling',
-    limitsLabel: 'Taking a good sample ↓'
-  },
-  situations: {
-    title: 'Start from where you are',
-    intro: 'Pick the card that sounds like you. Each one takes you to the right test or the right part of this guide.',
-    cards: [
-      { icon: 'rain', title: 'After heavy rain or flooding', body: 'Rain can wash bacteria into a source. Retest for E. coli.', cta: 'E. coli Test', href: BAC_PRODUCTS.ecoli.url, style: 'pop', flag: 'COMMON' },
-      { icon: 'alert', title: 'A test found bacteria', body: 'What to do today, and who to tell.', cta: 'Next steps', go: 'positive', style: 'ink' },
-      { icon: 'drop', title: 'Boil water notice', body: 'How to boil water properly, and what you can still use it for.', cta: 'Boiling safely', go: 'boil' },
-      { icon: 'help', title: 'Someone is unwell', body: 'When to see a doctor, and who to tell about the water.', cta: 'Illness', go: 'illness' },
-      { icon: 'home', title: 'Loft tank or bathroom tap', body: 'Which taps are on a tank, and how to keep it clean.', cta: 'Storage tanks', go: 'tanks' },
-      { icon: 'wrench', title: 'UV lamp or supply work', body: 'Treatment only works when it is looked after. Retest after any work.', cta: 'Fixing the cause', go: 'fix' },
-      { icon: 'compass', title: 'Well, borehole or spring', body: 'Private supplies need regular testing. Build a plan for yours.', cta: 'Private supplies guide', href: '/private-water-supplies' },
-      { icon: 'clipboard', title: 'Taking a sample', body: 'A careful sample avoids a false positive from a dirty tap.', cta: 'Sampling tips', go: 'sampling' }
-    ]
-  },
-  tool: {
-    id: 'bacteriacheck',
-    eyebrow: 'Bacteria Next Steps',
-    title: 'What should you do now?',
-    intro: 'Four quick taps: where your water comes from, what has happened, who drinks it, and whether there is a boil notice. You get what to do today, who to tell, and the test that fits.',
-    small: 'Your answers stay in your browser.'
-  },
-  chapters: {
-    list: [
-      { id: 'what-it-means', nav: 'What the bacteria mean', title: 'What E. coli and coliforms <em>tell you</em>', html: BCH_WHAT },
-      { id: 'where-in', nav: 'Where bacteria get in', title: 'Where bacteria <em>get in</em>', html: BCH_WHERE },
-      { id: 'mains-private', nav: 'Mains or private supply', title: 'Mains water or a <em>private supply</em>', html: BCH_MAINS },
-      { id: 'positive', nav: 'If a test is positive', title: 'If a test is <em>positive</em>', html: BCH_POSITIVE },
-      { id: 'boil', nav: 'Boiling water safely', title: 'Boiling water <em>safely</em>', html: BCH_BOIL },
-      { id: 'illness', nav: 'Illness and getting help', title: 'Illness and <em>getting help</em>', html: BCH_ILL },
-      { id: 'sampling', nav: 'Taking a good sample', title: 'Taking a good sample', html: BCH_SAMPLE, collapsed: true },
-      { id: 'fix', nav: 'Fixing the cause', title: 'Fixing the cause', html: BCH_FIX, collapsed: true },
-      { id: 'tanks', nav: 'Storage tanks and bathroom taps', title: 'Storage tanks and bathroom taps', html: BCH_TANKS, collapsed: true }
-    ]
-  },
-  map: mapBlock({
-    intro: 'See which water company serves your area, then open the UK testing map for community results near you.',
-    area: ['company']
-  }),
-  faq: { title: 'Bacteria and E. coli questions', intro: 'Short answers, with the regulator\'s own words where it matters.', items: BAC_FAQ },
-  reads: [
-    { href: '/post/how-to-test-e-coli-in-water-what-home-screening-can-do', title: 'How to test for E. coli: what home screening can do', svg: bigIcon('flask') },
-    { href: '/post/testing-positive-for-e-coli', title: 'Tested positive for E. coli?', svg: bigIcon('alert') },
-    { href: '/post/e-coli-bacteria-in-well-water', title: 'E. coli bacteria in well water', svg: bigIcon('compass') },
-    { href: '/post/what-is-the-level-of-e-coli-in-uk-water', title: 'What is the level of E. coli in UK water?', svg: bigIcon('drop') }
-  ],
-  sources: [
-    ['DWI: Drinking water standards and regulations', SU.dwiStd],
-    ['DWI: Receiving a boil water notice', SU.dwiBoil],
-    ['DWI: Illness', SU.dwiIll],
-    ['DWI: Water storage tanks and cisterns', SU.dwiTanks],
-    ['DWI: Protecting your private water supply', SU.dwiProtect],
-    ['North Norfolk District Council: Microbiological failure', SU.nnMicro],
-    ['NHS inform: Shiga toxin-producing E. coli (STEC)', SU.stec],
-    ['NHS: Making up baby formula', SU.nhsFormula],
-    ['Food Standards Scotland: Water sources and storage', SU.fss]
-  ],
-  routing: routingBlock({
-    kit: 'ecoli',
-    title: 'Your next step on bacteria',
-    kitLabel: 'Quick retest',
-    kitNote: 'E. coli and coliforms, one sample',
-    choose: {
-      title: 'Not sure what to do?',
-      body: 'Four taps: your water, what happened, who drinks it, and any boil notice.',
-      buttons: [{ go: 'tool', label: 'Start Bacteria Next Steps' }, { href: '/which-water-test-do-i-need', label: 'Which test do I need?' }]
-    },
-    related: relatedFor('/bacteria-e-coli-in-drinking-water').slice(0, 6)
-  })
+    limits: '<b>What a home screen doesn\'t cover:</b> nitrate, pH, iron, manganese and enterococci need a lab.',
+    limitsTarget: 'concerns',
+    limitsLabel: 'Find your test ↑'
+  }
 };
 
-/* Bacteria Next Steps: four taps -> what to do today, who to tell, how to confirm, the test that fits.
-   Quoted text is word for word from the linked page. Not medical advice. */
-TOOLS.bacteriacheck = function (el, c) {
-  quiz(el, c, {
-    id: 'bc',
-    name: 'Bacteria Next Steps',
-    resultMeta: 'Your next steps',
-    finalLabel: 'See my next steps',
-    copyLabel: 'Copy my steps',
-    memberLabel: 'Email me my steps',
-    textTitle: 'My bacteria next steps (SustainWater)',
-    footnote: 'A guide, not medical advice. If someone is unwell, speak to a doctor or call 111.',
-    steps: [
-      { q: 'Where does your drinking water come from?', o: ['Mains, from a water company', 'A private supply: well, borehole or spring', 'A storage tank in the loft', 'Not sure'] },
-      { q: 'What has happened?', o: ['A home test showed bacteria', 'A council or lab test found E. coli', 'Heavy rain or flooding', 'Work on the supply, tank or UV lamp', 'Someone at home is unwell', 'Nothing: a routine check'] },
-      { q: 'Who drinks the water?', o: ['Includes a baby, a young child, or someone older or unwell', 'Healthy adults only'] },
-      { q: 'Is there a boil water notice?', o: ['Yes', 'No', 'Not sure'] }
-    ],
-    result(ans) {
-      const [src_, event, who, notice] = [ans[0], ans[1], ans[2], ans[3]];
-      const mains = src_ === 0, priv = src_ === 1, tank = src_ === 2;
-      const positive = event === 0 || event === 1;
-      let band, title;
-      if (positive || notice === 0) { band = ['act', 'Act today']; title = 'Don’t drink it untreated, and tell the right people.'; }
-      else if (event === 4) { band = ['act', 'Get advice today']; title = 'See a doctor if you’re worried, and tell your water company.'; }
-      else if (event === 2 || event === 3) { band = ['check', 'Retest now']; title = 'Screen for E. coli before relying on the water.'; }
-      else { band = ['clear', 'Routine check']; title = mains ? 'Mains water rarely has bacteria problems. Check tanks and taps.' : 'Screen once a year, and after rain or work on the supply.'; }
-      const rows = [];
-      if (positive || notice === 0) rows.push(['TODAY', `Boil drinking water or use bottled water. The DWI says ${qi('You should boil it before you drink it, use it to brush your teeth, make ice cubes, prepare food, clean feeding equipment or give it to your pets.', 'DWI', SU.dwiBoil)}`]);
-      else if (event === 4) rows.push(['TODAY', `${qi('If you believe that your drinking water is causing illness, you should consult a doctor and contact your water company in the first instance.', 'DWI', SU.dwiIll)}`]);
-      else if (event === 2 || event === 3) rows.push(['TODAY', priv ? `Screen for E. coli. We suggest boiling drinking water until you have a clear result: ${qi('heavy rainfall can significantly deteriorate the microbiological quality of various water sources', 'FSS', SU.fss)}.` : 'Screen for E. coli, and run the tap for a minute or two before sampling.']);
-      if (positive || event === 4 || notice === 0) {
-        if (mains) rows.push(['TELL', `Your water company. ${qi('Your water company may come to your property and take some water quality samples.', 'DWI', SU.dwiIll)}`]);
-        else if (priv) rows.push(['TELL', `Your council’s environmental health team. ${event === 1 ? qi('If E. coli and/or Enterococci have been found a Notice is likely to be served by the council.', 'North Norfolk DC', SU.nnMicro) : ''}`]);
-        else rows.push(['TELL', 'Your water company if you’re on mains; your council if it’s a private supply. If you rent, tell your landlord too.']);
-      }
-      if (event === 0) rows.push(['CONFIRM', `A home screen is not a lab result. Coliforms can come from ${qi('dirt inside a tap', 'North Norfolk DC', SU.nnMicro)}, so confirm with your water company, council or an accredited lab.`]);
-      if (tank) rows.push(['CHECK', `The tank lid and screens. A tank needs a lid that ${qi('excludes light and is tightly fitting and securely fastened, so that birds, vermin, and dust cannot get into the water.', 'DWI', SU.dwiTanks)}`]);
-      if (priv && (positive || event === 3)) rows.push(['FIX', `Check the source, treatment and tank, fix what you find, then retest before drinking untreated. A UV lamp ${qi('Can stop working and not be noticed if not checked or alarmed.', 'North Norfolk DC', SU.nnMicro)}`]);
-      if (!positive && event !== 4 && notice !== 0) rows.push(['THEN', priv ? 'Screen at least once a year, in the same month, and after heavy rain, flooding or work on the supply.' : 'Use the cold kitchen tap for drinking. Retest if the taste, smell or colour changes.']);
-      const notes = [];
-      if (who === 0) notes.push(`Making up baby formula? The NHS advice is to ${qi('leave the water to cool for no more than 30 minutes, so that it remains at a temperature of at least 70C', 'NHS', SU.nhsFormula)}.`);
-      if (event === 4) notes.push(`NHS inform says to contact your GP practice urgently if ${qi('you or your child has bloody diarrhoea', 'NHS inform', SU.stec)}. ${qi('Phone 111 if your GP practice is closed.', 'NHS inform', SU.stec)}`);
-      if (notice === 0) notes.push(`${qi('The water is still safe to shower and bathe in, but make sure it does not get into your mouth.', 'DWI', SU.dwiBoil)}`);
-      const kit = priv && !positive && event !== 2 && event !== 3 ? 'trio' : 'ecoli';
-      return { band, title, rows, extra: notes.map(n => `<div class="plan-note">${n}</div>`).join(''), kit };
-    }
-  });
-};
+function renderMapNext(c) {
+  const P = c.products;
+  return `<div class="page">
+  <section class="sect sect--paper" id="your-area" aria-labelledby="area-h"><div class="wrap">
+    <div class="sect-head"><div><p class="eyebrow">Your next step</p><h2 class="h2" id="area-h">What your postcode tells you</h2></div><p>Search a postcode on the map above. We add what public data says about your area, and the tools that fit it.</p></div>
+    <div class="map-next-grid">
+      <div class="pc-result" data-area-summary>Search your postcode on the map above and your area appears here: housing age, water company, hardness and fluoride.</div>
+      <div class="sits sits--3" data-next>${mapNextCards(null).map(sitCard).join('')}</div>
+    </div>
+    <div class="btn-row" style="margin-top:18px">${memberBtn('email-area', 'Email me this area report', 'primary')}</div>
+    <p class="note" style="margin-top:18px">${icon('info', 2)}<span>Area facts are approximate, for the centre of the postcode district, from public data (EPC records, Ofwat boundaries, DWI hardness and fluoride maps). Community results are local context, not official monitoring. Your water company’s checker has the official figures for your address.</span></p>
+  </div></section>
+  ${rSits(c.concerns)}
+  ${rLadder(c.ladder, P)}
+  <section class="sect sect--ink" id="add-result" aria-labelledby="add-h"><div class="wrap"><div class="routes routes--2">
+    <div class="route route--kit"><span class="k">Already tested your water?</span><span class="t" id="add-h">Add your result to the map</span><p>Help build a clearer local picture, and get 10% off your next order.*</p><div class="btn-row" style="margin-top:auto">${btn('/test-result-form', 'Add my result', 'white btn--sm', true)}</div><span class="small" style="color:rgba(255,255,255,.7)">*Available when you upload a valid result from a SustainWater test.</span></div>
+    <div class="route"><span class="k">Stay informed</span><span class="t">Alerts for your area</span><p>Be told when new test results are added near you. Add your postcode to the mailing list form below.</p><div class="btn-row">${btn('/result-interpretation-centre', 'Understand a result', 'ghost btn--sm')}</div></div>
+  </div></div></section>
+  </div>`;
+}
 
 const CSS = ":host {\n  display: block; width: 100%;\n  --ink: #140A07; --ink2: #364048; --ink3: #5E6973;\n  --line: #E3E6E2; --line2: #ECEFEA;\n  --paper: #FAFAF7; --paper2: #F4F4EF; --white: #FFFFFF;\n  --accent: #0057E1; --deep: #0046B8; --mid: #116DFF; --soft: #F1FCFE; --warm: #966B54;\n  --warn: #B3640F; --warnText: #8F4E0A; --warnSoft: #F4ECE3;\n  --ok: #2D6A3F; --okSoft: #EEF5EF; --alert: #B42318; --alertSoft: #FDF0EE;\n  --footer: #0A1115;\n  --font: \"Montserrat\", system-ui, -apple-system, \"Segoe UI\", sans-serif;\n  --r-sm: 8px; --r: 14px; --r-md: 16px; --r-lg: 18px; --r-xl: 20px;\n  --shadow-sm: 0 1px 2px rgba(20, 10, 7, 0.06);\n  --shadow: 0 6px 20px -8px rgba(20, 10, 7, 0.18), 0 2px 4px rgba(20, 10, 7, 0.04);\n  --shadow-lg: 0 24px 50px -20px rgba(20, 10, 7, 0.28), 0 4px 8px rgba(20, 10, 7, 0.05);\n  --gutter: 80px;\n}\n*, *::before, *::after { box-sizing: border-box; }\n.page { container-type: inline-size; container-name: swhub; font-family: var(--font); color: var(--ink); background: var(--white); -webkit-font-smoothing: antialiased; line-height: 1.55; }\na { color: var(--accent); text-decoration: none; }\na:hover { color: var(--deep); }\na:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--mid); outline-offset: 2px; }\nimg, svg { max-width: 100%; }\nbutton { font-family: inherit; }\n.wrap { max-width: 1440px; margin: 0 auto; padding-inline: var(--gutter); }\n.sect { padding-block: 80px; }\n.sect--paper { background: var(--paper); }\n.sect--ink { background: var(--ink); color: var(--white); }\n.sect--band { background: linear-gradient(135deg, var(--deep) 0%, var(--accent) 100%); color: var(--white); }\n.sect-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 34px; }\n.sect-head p { margin: 0; max-width: 440px; color: var(--ink3); font-size: 15px; }\n.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }\n.sect--band .eyebrow, .sect--ink .eyebrow { color: rgba(255, 255, 255, 0.72); }\n.pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border-radius: 999px; background: var(--soft); color: var(--deep); font-size: 12px; font-weight: 600; letter-spacing: 0.05em; }\n.pill::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }\n.h1 { font-size: clamp(32px, 3.9cqi, 56px); font-weight: 600; letter-spacing: -0.035em; line-height: 1.05; margin: 0; }\n.h1 em, .h2 em { font-style: normal; color: var(--accent); }\n.h2 { font-size: clamp(26px, 2.8cqi, 40px); font-weight: 600; letter-spacing: -0.025em; line-height: 1.1; margin: 0; }\n.h3 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; margin: 0; }\n.lead { font-size: 19px; line-height: 1.6; color: var(--ink2); margin: 0; max-width: 680px; }\n.read { font-size: 17px; line-height: 1.7; color: var(--ink2); max-width: 680px; margin: 0; }\n.read + .read { margin-top: 14px; }\n.small { font-size: 13px; color: var(--ink3); line-height: 1.5; }\nq, .q { quotes: \"\u201c\" \"\u201d\"; }\n.src { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--white); color: var(--deep); border: 1px solid var(--line); white-space: nowrap; vertical-align: 2px; }\n.src svg { width: 12px; height: 12px; }\n.checked { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink3); }\n.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 15px 24px; border: 1.5px solid transparent; border-radius: 0; font-size: 15px; font-weight: 600; line-height: 1.2; cursor: pointer; transition: transform .15s, background .15s, color .15s, border-color .15s; text-align: center; }\n.btn:hover { transform: translateY(-1px); }\n.btn svg { width: 16px; height: 16px; flex-shrink: 0; }\n.btn--primary { background: var(--accent); border-color: var(--accent); color: var(--white); }\n.btn--primary:hover { background: var(--deep); border-color: var(--deep); color: var(--white); }\n.btn--secondary { background: var(--white); border-color: var(--ink); color: var(--ink); }\n.btn--secondary:hover { color: var(--ink); }\n.btn--white { background: var(--white); border-color: var(--white); color: var(--deep); }\n.btn--white:hover { color: var(--deep); }\n.btn--ghost { background: transparent; border-color: rgba(255, 255, 255, 0.5); color: var(--white); }\n.btn--ghost:hover { color: var(--white); border-color: var(--white); }\n.btn--sm { padding: 11px 16px; font-size: 14px; }\n.btn--ink { background: var(--ink); border-color: var(--ink); color: var(--white); }\n.btn--ink:hover { color: var(--white); }\n.btn--alert { background: var(--alert); border-color: var(--alert); color: var(--white); }\n.btn--alert:hover { color: var(--white); }\n.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }\n.tag { display: inline-flex; font-size: 11px; font-weight: 600; padding: 4px 9px; border-radius: 999px; background: var(--paper2); color: var(--ink2); border: 1px solid var(--line); }\n.tags { display: flex; flex-wrap: wrap; gap: 6px; }\n.band { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }\n.band svg { width: 13px; height: 13px; }\n.band--clear { background: var(--okSoft); color: var(--ok); }\n.band--check { background: var(--warnSoft); color: var(--warnText); }\n.band--act { background: var(--alertSoft); color: var(--alert); }\n.band--act.on-card { background: var(--white); }\n.alert { background: var(--soft); border-bottom: 1px solid rgba(0, 87, 225, 0.2); color: var(--deep); font-size: 14px; }\n.alert .wrap { display: flex; align-items: center; gap: 12px; padding-block: 11px; }\n.alert svg { width: 18px; height: 18px; flex-shrink: 0; }\n.alert a, .alert .linkbtn { margin-left: auto; font-weight: 600; white-space: nowrap; color: var(--accent); }\n.hero { padding-block: 34px 72px; }\n.crumbs { font-size: 13px; color: var(--ink3); margin: 0 0 24px; display: flex; gap: 6px; flex-wrap: wrap; }\n.crumbs a { color: var(--ink3); }\n.crumbs span[aria-current] { color: var(--ink); font-weight: 500; }\n.hero-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 40px; align-items: start; }\n.hero-copy { display: flex; flex-direction: column; gap: 20px; }\n.hero-copy .pill { align-self: flex-start; }\n.meta-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }\n.ticks { display: flex; gap: 22px; flex-wrap: wrap; padding-top: 22px; border-top: 1px solid var(--line); font-size: 14px; font-weight: 500; color: var(--ink2); list-style: none; margin: 4px 0 0; padding-left: 0; }\n.ticks li { display: inline-flex; gap: 8px; align-items: center; }\n.ticks svg { width: 16px; height: 16px; color: var(--accent); }\n.fig-panel { position: relative; background: var(--paper); border: 1px solid var(--line2); border-radius: var(--r-xl); margin-top: 40px; padding: 64px 4% 112px; }\n.fig-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--deep); }\n.fig-panel .fig-label { position: absolute; left: 24px; top: 20px; }\n.fig-panel .fig { position: relative; max-width: 560px; margin: 0 auto; }\n.fig-panel .fig svg { width: 100%; height: auto; display: block; }\n.float { position: absolute; background: var(--white); border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px 18px; box-shadow: 0 12px 32px -12px rgba(20, 10, 7, 0.18); }\n.float .k { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }\n.float .v { font-size: 14px; font-weight: 600; margin-top: 4px; line-height: 1.35; }\n.float--tr { right: -14px; top: 28px; width: 250px; }\n.float--bl { left: -24px; bottom: 26px; width: 300px; display: flex; align-items: center; gap: 14px; }\n.float--bl .price { font-size: 20px; font-weight: 700; color: var(--deep); margin-left: auto; }\n.hot { position: absolute; transform: translate(-50%, -50%); width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--white); font-size: 12px; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 5px rgba(0, 87, 225, 0.15); border: 0; cursor: pointer; padding: 0; }\n.hot:hover { background: var(--deep); }\n.btn[disabled] { opacity: 0.45; cursor: not-allowed; transform: none; }\n.plan-kit { color: var(--ink); }\n.plan-kit:hover { border-color: var(--accent); color: var(--ink); }\n.plan-kit .price { font-size: 18px; margin-left: auto; }\n.plan-kit svg { width: 16px; height: 16px; color: var(--accent); }\n.plan-row.lab .when { color: var(--warnText); }\n.cite { font-size: 12px; color: var(--ink3); }\n.q-list { margin: 0; padding-left: 20px; color: var(--ink2); font-size: 15px; line-height: 1.6; display: flex; flex-direction: column; gap: 6px; }\n.read ul, .acc-body ul { margin: 0; }\n.tabs-wrap { display: flex; flex-direction: column; gap: 14px; }\n.months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }\n.months span { font-size: 11px; font-weight: 600; text-align: center; padding: 8px 0; border-radius: 6px; background: var(--paper2); color: var(--ink3); }\n.months span.on { background: var(--accent); color: var(--white); }\n.jump { position: sticky; top: 0; z-index: 20; background: rgba(255, 255, 255, 0.97); border-block: 1px solid var(--line); box-shadow: var(--shadow-sm); }\n.jump .wrap { display: flex; align-items: center; gap: 6px; height: 58px; overflow-x: auto; scrollbar-width: none; }\n.jump .wrap::-webkit-scrollbar { display: none; }\n.jump .lbl { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink3); margin-right: 10px; white-space: nowrap; }\n.jump button.j { background: none; border: 0; padding: 8px 14px; border-radius: 999px; color: var(--ink2); font-size: 14px; font-weight: 500; cursor: pointer; white-space: nowrap; }\n.jump button.j[aria-current=\"true\"] { background: var(--ink); color: var(--white); font-weight: 600; }\n.jump .btn { margin-left: auto; white-space: nowrap; }\n.ladder { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 20px; }\n.kit { background: var(--white); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; color: inherit; transition: transform .2s, box-shadow .2s, border-color .2s; }\n.kit:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -22px rgba(20, 10, 7, 0.28); border-color: var(--accent); }\n.kit-img { height: 170px; background: var(--paper2); display: grid; place-items: center; position: relative; }\n.kit-img .fig-label { position: absolute; left: 18px; top: 16px; color: var(--ink3); }\n.kit-body { padding: 22px 22px 24px; display: flex; flex-direction: column; gap: 12px; flex: 1; }\n.kit-body p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink3); }\n.kit-foot { margin-top: auto; padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }\n.price { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--deep); }\n.was { font-size: 15px; font-weight: 600; color: var(--ink3); text-decoration: line-through; margin-right: 8px; }\n.kit--hero { background: linear-gradient(135deg, var(--deep) 0%, var(--accent) 100%); color: var(--white); border-color: var(--deep); position: relative; }\n.kit--hero .kit-img { background: rgba(255, 255, 255, 0.08); height: 210px; }\n.kit--hero .kit-img .fig-label { left: auto; right: 18px; top: 22px; color: rgba(255, 255, 255, 0.6); }\n.kit--hero .kit-body { padding: 26px 28px 28px; }\n.kit--hero .h3 { font-size: 26px; }\n.kit--hero .kit-body p { color: rgba(255, 255, 255, 0.82); font-size: 15px; }\n.kit--hero .tag { background: rgba(255, 255, 255, 0.12); color: var(--white); border-color: rgba(255, 255, 255, 0.2); }\n.kit--hero .price { color: var(--white); font-size: 30px; }\n.kit--hero .was { color: rgba(255, 255, 255, 0.6); font-size: 18px; }\n.kit-badge { position: absolute; top: 18px; left: 18px; padding: 6px 12px; border-radius: 999px; background: var(--white); color: var(--deep); font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; z-index: 1; }\n.kit .go { font-size: 15px; font-weight: 600; color: var(--accent); display: inline-flex; gap: 6px; align-items: center; }\n.kit .go svg { width: 16px; height: 16px; }\n.infobar { margin-top: 20px; background: var(--white); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 22px; display: flex; align-items: center; gap: 14px; font-size: 15px; color: var(--ink2); }\n.infobar .ico { width: 36px; height: 36px; border-radius: 10px; background: var(--warnSoft); color: var(--warn); display: grid; place-items: center; flex-shrink: 0; }\n.infobar .ico svg { width: 18px; height: 18px; }\n.infobar b { color: var(--ink); font-weight: 600; }\n.infobar a { margin-left: auto; font-weight: 600; white-space: nowrap; }\n.sits { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }\n.sit { background: var(--white); border: 1px solid var(--line); border-radius: var(--r-md); padding: 22px 20px 20px; display: flex; flex-direction: column; gap: 12px; color: var(--ink); min-height: 200px; position: relative; overflow: hidden; transition: border-color .2s, box-shadow .2s, transform .2s; text-align: left; font: inherit; cursor: pointer; }\n.sit::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform .25s; }\n.sit:hover { border-color: var(--accent); box-shadow: 0 12px 28px -16px rgba(20, 10, 7, 0.25); transform: translateY(-2px); color: var(--ink); }\n.sit:hover::after { transform: scaleX(1); }\n.sit .ic { width: 40px; height: 40px; border-radius: 10px; background: var(--paper2); color: var(--accent); display: grid; place-items: center; }\n.sit .ic svg { width: 20px; height: 20px; }\n.sit .t { font-size: 17px; font-weight: 600; line-height: 1.25; }\n.sit .b { font-size: 13px; color: var(--ink3); line-height: 1.5; flex: 1; }\n.sit .cta { font-size: 14px; font-weight: 600; color: var(--accent); }\n.sit--pop { background: var(--soft); border-color: rgba(0, 87, 225, 0.35); }\n.sit--pop .ic { background: var(--white); }\n.sit--pop .flag { position: absolute; right: 18px; top: 26px; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; color: var(--deep); }\n.sit--ink { background: var(--ink); border-color: var(--ink); color: var(--white); }\n.sit--ink:hover { color: var(--white); }\n.sit--ink .ic { background: rgba(255, 255, 255, 0.1); color: var(--white); }\n.sit--ink .b { color: rgba(255, 255, 255, 0.72); }\n.sit--ink .cta { color: var(--white); }\n.tool-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 48px; align-items: center; }\n.tool-copy { display: flex; flex-direction: column; gap: 18px; }\n.tool-copy .h2 { font-size: clamp(28px, 3cqi, 44px); }\n.tool-copy p { margin: 0; font-size: 17px; line-height: 1.6; color: rgba(255, 255, 255, 0.84); max-width: 560px; }\n.tool-card { background: var(--white); color: var(--ink); border-radius: var(--r-lg); padding: 26px; box-shadow: 0 24px 50px -20px rgba(20, 10, 7, 0.45); display: flex; flex-direction: column; gap: 16px; }\n.progress { height: 4px; background: var(--paper2); border-radius: 999px; overflow: hidden; }\n.progress i { display: block; height: 4px; background: var(--accent); border-radius: 999px; transition: width .25s; }\n.step-meta { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--ink3); }\n.q-title { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; margin: 0; }\n.opts { display: flex; flex-direction: column; gap: 8px; }\n.opt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 14px; border: 1px solid var(--line); background: var(--white); border-radius: 10px; font-size: 15px; font-weight: 500; color: var(--ink); cursor: pointer; min-height: 48px; }\n.opt::before { content: \"\"; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #9AA3AB; flex-shrink: 0; }\n.opt[aria-pressed=\"true\"] { border: 1.5px solid var(--accent); background: var(--soft); font-weight: 600; }\n.opt[aria-pressed=\"true\"]::before { border: 6px solid var(--accent); }\n.tool-nav { display: flex; justify-content: space-between; align-items: center; gap: 10px; }\n.linkbtn { background: none; border: 0; padding: 10px 0; font-size: 14px; font-weight: 600; color: var(--ink2); cursor: pointer; }\n.plan { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }\n.plan-row { display: flex; gap: 12px; padding: 14px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.45; }\n.plan-row:first-child { border-top: 0; }\n.plan-row .when { font-size: 12px; font-weight: 700; color: var(--accent); width: 58px; flex-shrink: 0; padding-top: 2px; }\n.plan-note { background: var(--soft); border: 1px solid rgba(0, 87, 225, 0.25); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; color: var(--deep); }\n.plan-kit { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }\n.plan-kit .n { font-size: 14px; font-weight: 600; }\n.plan-kit .p { font-size: 12px; color: var(--ink3); }\n.chap-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 9fr); gap: 32px; align-items: start; }\n.rail { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }\n.rail .lbl { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink3); margin-bottom: 12px; }\n.rail button { text-align: left; background: none; border: 0; border-left: 2px solid var(--line); padding: 10px 14px; font-size: 14px; color: var(--ink2); cursor: pointer; font-family: inherit; }\n.rail button[aria-current=\"true\"] { border-left-color: var(--accent); background: var(--soft); color: var(--deep); font-weight: 600; }\n.rail-kit { margin-top: 22px; background: var(--paper); border: 1px solid var(--line2); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 10px; }\n.rail-kit .n { font-size: 13px; font-weight: 600; }\n.chapters { display: flex; flex-direction: column; gap: 72px; }\n.chap { display: flex; flex-direction: column; gap: 20px; scroll-margin-top: 80px; }\n.num { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: var(--accent); }\n.num::before { content: \"\"; width: 28px; height: 1.5px; background: var(--accent); }\n.chap .h2 { font-size: clamp(26px, 2.5cqi, 36px); }\n.points { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }\n.point { border: 1px solid var(--line); border-radius: var(--r); padding: 18px; display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 90px; }\n.point.is-lit { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 87, 225, 0.15); }\n.point .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--white); font-size: 12px; font-weight: 700; display: grid; place-items: center; }\n.point .t { font-size: 16px; font-weight: 600; }\n.point .b { font-size: 13px; color: var(--ink2); line-height: 1.55; }\n.point .x { font-size: 12px; font-weight: 600; color: var(--deep); margin-top: auto; }\n.tbl { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; font-size: 14px; }\n.tbl-row { display: grid; grid-template-columns: 1.1fr 1.8fr 1fr 0.8fr; border-top: 1px solid var(--line); align-items: start; }\n.tbl-row:first-child { border-top: 0; }\n.tbl-row > div { padding: 14px 16px; line-height: 1.5; }\n.tbl-row.head { background: var(--paper2); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink2); }\n.tbl-row.lab { background: var(--paper); }\n.tbl .k { font-weight: 600; color: var(--ink); }\n.tbl .yes { color: var(--ok); font-weight: 600; }\n.tbl .no { color: var(--ink3); }\n.tbl .why { color: var(--ink2); }\n.tbl .mlabel { display: none; }\n.inline-cta { display: flex; align-items: center; gap: 14px; background: var(--soft); border: 1px solid rgba(0, 87, 225, 0.25); border-radius: var(--r); padding: 14px 16px; flex-wrap: wrap; }\n.inline-cta span { font-size: 15px; color: var(--ink); flex: 1 1 320px; }\n.inline-cta b { font-weight: 600; }\n.quote { background: var(--paper); border: 1px solid var(--line2); border-radius: var(--r); padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }\n.quote blockquote { margin: 0; font-size: 17px; line-height: 1.55; font-weight: 500; color: var(--ink); }\n.quote .by { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--ink3); padding-top: 10px; border-top: 1px solid var(--line); flex-wrap: wrap; }\n.calendar { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 18px; }\n.triggers { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; list-style: none; padding: 0; margin: 0; }\n.triggers li { display: inline-flex; padding: 8px 12px; border-radius: 999px; background: var(--soft); color: var(--deep); font-weight: 600; border: 1px solid rgba(0, 87, 225, 0.25); }\n.triggers li.main { background: var(--accent); color: var(--white); border-color: var(--accent); }\n.triggers a, .triggers .linkbtn { color: inherit; font: inherit; padding: 0; text-decoration: underline; text-underline-offset: 3px; }\n.tabs { display: inline-flex; flex-wrap: wrap; padding: 4px; background: var(--paper2); border-radius: 999px; gap: 4px; align-self: flex-start; }\n.tabs button { border: 0; background: none; padding: 9px 18px; border-radius: 999px; font-size: 14px; font-weight: 600; color: var(--ink2); cursor: pointer; min-height: 40px; }\n.tabs button[aria-selected=\"true\"] { background: var(--white); color: var(--ink); box-shadow: 0 1px 2px rgba(20, 10, 7, 0.12); }\n.tabpanel { border: 1px solid var(--line); border-radius: var(--r); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }\n.tabpanel[hidden] { display: none; }\n.facts { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 0; font-size: 15px; }\n.facts dt { font-weight: 600; padding: 10px 0; border-top: 1px solid var(--line); }\n.facts dd { margin: 0; padding: 10px 0; border-top: 1px solid var(--line); color: var(--ink2); line-height: 1.55; }\n.ladder-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }\n.ladder-steps > div { padding: 20px; display: flex; flex-direction: column; gap: 8px; border-left: 1px solid var(--line); }\n.ladder-steps > div:first-child { border-left: 0; background: var(--soft); }\n.ladder-steps .s { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; color: var(--ink3); }\n.ladder-steps > div:first-child .s { color: var(--accent); }\n.ladder-steps .t { font-size: 16px; font-weight: 600; }\n.ladder-steps .b { font-size: 13px; color: var(--ink2); line-height: 1.5; }\n.urgent { border: 1.5px solid var(--alert); background: var(--alertSoft); border-radius: var(--r); padding: 22px 24px; display: flex; flex-direction: column; gap: 14px; }\n.urgent .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }\n.urgent .top .t { font-size: 18px; font-weight: 600; }\n.urgent ol { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }\n.urgent li { background: var(--white); border-radius: 10px; padding: 14px; font-size: 14px; line-height: 1.55; color: var(--ink2); }\n.urgent li b { color: var(--ink); font-weight: 600; }\ndetails.acc { border-bottom: 1px solid var(--line); }\ndetails.acc > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; cursor: pointer; font-size: 18px; font-weight: 600; }\ndetails.acc > summary::-webkit-details-marker { display: none; }\ndetails.acc > summary::after { content: \"+\"; font-size: 24px; font-weight: 400; line-height: 1; color: var(--ink); flex-shrink: 0; }\ndetails.acc[open] > summary::after { content: \"\u2013\"; color: var(--accent); }\ndetails.acc .acc-body { padding: 0 0 22px; display: flex; flex-direction: column; gap: 12px; }\ndetails.acc .n { color: var(--accent); font-size: 14px; font-weight: 700; letter-spacing: 0.12em; margin-right: 14px; }\n.acc-list { border-top: 1px solid var(--line); }\n.types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }\n.types > div { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.5; color: var(--ink2); }\n.types b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px; }\n.map-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 48px; align-items: center; }\n.pc-form { display: flex; gap: 8px; }\n.pc-form input { flex: 1; min-width: 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--r-sm); font: 600 16px var(--font); color: var(--ink); background: var(--white); text-transform: uppercase; }\n.pc-result { border: 1px solid var(--line); background: var(--white); border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.55; color: var(--ink2); }\n.pc-result[hidden] { display: none; }\n.pc-result b { color: var(--ink); font-weight: 600; }\n.pc-next { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-weight: 600; }\n.route .pc-next a { color: var(--white); }\n.note { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--ink2); background: var(--white); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; line-height: 1.5; }\n.note svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; margin-top: 2px; }\n.map-art { height: 380px; background: var(--white); border: 1px solid var(--line); border-radius: var(--r-xl); position: relative; overflow: hidden; box-shadow: var(--shadow); }\n.map-art svg { position: absolute; inset: 0; width: 100%; height: 100%; }\n.map-art .pin { position: absolute; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 6px rgba(0, 87, 225, 0.15); }\n.map-art .pin.w { background: var(--warn); box-shadow: 0 0 0 6px rgba(179, 100, 15, 0.15); }\n.map-art .chips { position: absolute; left: 20px; top: 18px; display: flex; gap: 6px; }\n.map-art .chips span { padding: 6px 12px; border-radius: 999px; background: var(--white); border: 1px solid var(--line); font-size: 12px; font-weight: 600; color: var(--ink2); }\n.map-art .chips span.on { background: var(--accent); border-color: var(--accent); color: var(--white); }\n.faq-grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }\n.faq details.acc > summary { font-size: 17px; }\n.faq .acc-body p { margin: 0; font-size: 15px; line-height: 1.65; color: var(--ink2); max-width: 640px; }\n.reads { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }\n.read-card { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; color: var(--ink); display: flex; flex-direction: column; transition: border-color .2s; }\n.read-card:hover { border-color: var(--accent); color: var(--ink); }\n.read-card .im { height: 140px; background: var(--paper2); display: grid; place-items: center; }\n.read-card .tt { padding: 16px; font-size: 15px; font-weight: 600; line-height: 1.35; }\n.sources summary { font-size: 15px; }\n.sources summary svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--accent); }\n.sources ul { margin: 0; padding: 0; list-style: none; }\n.sources li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }\n.sources li span { color: var(--ink3); white-space: nowrap; }\n.routes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }\n.route { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--r-lg); padding: 26px; display: flex; flex-direction: column; gap: 12px; min-height: 230px; color: var(--white); }\n.route .k { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.72); }\n.route .t { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }\n.route p { margin: 0; font-size: 14px; line-height: 1.55; color: rgba(255, 255, 255, 0.76); }\n.route .btn-row { margin-top: auto; }\n.route--kit { background: linear-gradient(135deg, var(--deep) 0%, var(--accent) 100%); border-color: var(--deep); }\n.route--kit .price { color: var(--white); font-size: 28px; }\n.route--kit .was { color: rgba(255, 255, 255, 0.6); font-size: 16px; }\n.route .pc-form input { border: 0; }\n.route .pc-result { background: rgba(255, 255, 255, 0.08); border: 0; color: rgba(255, 255, 255, 0.9); font-size: 13px; }\n.route .pc-result b { color: var(--white); }\n.route .small { color: rgba(255, 255, 255, 0.62); font-size: 11px; }\n.route .chipset { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }\n.route .chipset a { padding: 9px 13px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.3); color: var(--white); font-size: 13px; font-weight: 600; }\n.route .chipset a:hover { border-color: var(--white); }\n.route .list a { display: flex; justify-content: space-between; gap: 10px; padding: 11px 0; border-top: 1px solid rgba(255, 255, 255, 0.14); color: var(--white); font-size: 14px; font-weight: 500; }\n.route-ticks { display: flex; gap: 26px; flex-wrap: wrap; padding-top: 22px; margin-top: 36px; border-top: 1px solid rgba(255, 255, 255, 0.14); font-size: 14px; color: rgba(255, 255, 255, 0.72); list-style: none; padding-left: 0; margin-bottom: 0; }\n.buybar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--white); border-top: 1px solid var(--line); box-shadow: 0 -8px 24px -12px rgba(20, 10, 7, 0.25); padding: 12px 16px; display: none; align-items: center; gap: 12px; transform: translateY(110%); transition: transform .25s; }\n.buybar.show { transform: translateY(0); }\n.buybar .n { font-size: 14px; font-weight: 600; }\n.buybar .p { font-size: 12px; color: var(--ink3); }\n.buybar .btn { margin-left: auto; }\n@container swhub (max-width: 1180px) {\n  .page > * { --gutter: 48px; }\n  .float--bl { left: 12px; }\n  .float--tr { right: 12px; }\n  .sits { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n  .points { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n  .reads { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@container swhub (max-width: 980px) {\n  .hero-grid, .tool-grid, .map-grid, .faq-grid { grid-template-columns: minmax(0, 1fr); }\n  .fig-panel { margin-top: 8px; }\n  .ladder { grid-template-columns: minmax(0, 1fr); }\n  .chap-grid { grid-template-columns: minmax(0, 1fr); }\n  .rail { display: none; }\n  .routes { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n  .ladder-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n  .ladder-steps > div:nth-child(3) { border-left: 0; }\n  .ladder-steps > div:nth-child(n+3) { border-top: 1px solid var(--line); }\n  .urgent ol { grid-template-columns: minmax(0, 1fr); }\n  .buybar { display: flex; }\n}\n@container swhub (max-width: 720px) {\n  .page > * { --gutter: 16px; }\n  .sect { padding-block: 48px; }\n  .hero { padding-block: 18px 40px; }\n  .lead { font-size: 17px; }\n  .read { font-size: 16px; }\n  .hero-copy .btn-row .btn { width: 100%; }\n  .ticks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; font-size: 13px; }\n  .fig-panel { padding: 52px 12px 104px; }\n  .float--tr { display: none; }\n  .float--bl { left: 12px; right: 12px; width: auto; bottom: 12px; }\n  .jump .lbl, .jump .btn { display: none; }\n  .jump .wrap { height: 52px; }\n  .sits { grid-template-columns: minmax(0, 1fr); gap: 10px; }\n  .sit { min-height: 0; flex-direction: row; align-items: center; padding: 14px; }\n  .sit .b { display: none; }\n  .sit .t { flex: 1; font-size: 16px; }\n  .sit .cta { font-size: 13px; }\n  .sit--pop .flag { display: none; }\n  .points { grid-template-columns: minmax(0, 1fr); }\n  .tbl-row.head { display: none; }\n  .tbl-row { grid-template-columns: minmax(0, 1fr); padding: 6px 0; }\n  .tbl-row > div { padding: 4px 16px; }\n  .tbl-row > div:first-child { padding-top: 12px; font-size: 16px; }\n  .tbl .mlabel { display: inline; font-weight: 600; color: var(--ink3); margin-right: 6px; }\n  .facts { grid-template-columns: minmax(0, 1fr); }\n  .facts dt { padding-bottom: 0; }\n  .facts dd { border-top: 0; padding-top: 4px; }\n  .ladder-steps { grid-template-columns: minmax(0, 1fr); }\n  .ladder-steps > div { border-left: 0; border-top: 1px solid var(--line); }\n  .ladder-steps > div:first-child { border-top: 0; }\n  .types { grid-template-columns: minmax(0, 1fr); }\n  .reads { grid-template-columns: minmax(0, 1fr); }\n  .routes { grid-template-columns: minmax(0, 1fr); gap: 12px; }\n  .route { min-height: 0; padding: 20px; }\n  .route .t { font-size: 18px; }\n  .infobar { flex-wrap: wrap; }\n  .infobar a { margin-left: 0; }\n  .tabs { border-radius: 14px; }\n  .tabs button { flex: 1 1 40%; }\n  .tool-card { padding: 20px; }\n  .map-art { height: 240px; }\n  .pc-form { flex-wrap: wrap; }\n  .pc-form .btn { width: 100%; }\n  .alert .wrap { flex-wrap: wrap; gap: 6px 10px; }\n  .alert .wrap > span { flex: 1 1 200px; }\n  .alert a, .alert .linkbtn { margin-left: 28px; }\n  .months { grid-template-columns: repeat(6, minmax(0, 1fr)); }\n  .read-card { flex-direction: row; align-items: center; }\n  .read-card .im { height: 72px; width: 72px; flex-shrink: 0; }\n  .read-card .im svg { width: 34px; height: 34px; }\n  .sources summary { font-size: 14px; }\n}\n@media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }\n@media print { .jump, .buybar, .tool-grid .tool-copy .btn-row { display: none !important; } }\n:host(:not([members])) .member-only { display: none !important; }\n:host([members]) .member-off { display: none !important; }\n.area-list { list-style: none; margin: 8px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }\n.area-list li { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; }\n.area-list .k { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink3); padding-top: 2px; }\n.area-note { display: block; font-size: 12px; color: var(--ink3); }\n.route .area-list .k, .route .area-note { color: rgba(255, 255, 255, 0.65); }\n.route .pc-result a { color: var(--white); text-decoration: underline; text-underline-offset: 3px; }\n@container swhub (max-width: 520px) { .area-list li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }\n.facts-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }\n.facts-grid > div { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 4px; }\n.facts-grid .k { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink3); }\n.facts-grid .v { font-size: 24px; font-weight: 700; color: var(--deep); letter-spacing: -0.01em; }\n.facts-grid .s { font-size: 13px; color: var(--ink2); line-height: 1.45; }\n@container swhub (max-width: 720px) { .facts-grid { grid-template-columns: minmax(0, 1fr); } }\n.map-next-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 18px; align-items: start; }\n.sits.sits--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }\n.routes.routes--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n@container swhub (max-width: 980px) { .map-next-grid { grid-template-columns: minmax(0, 1fr); } .sits.sits--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }\n@container swhub (max-width: 720px) { .sits.sits--3, .routes.routes--2 { grid-template-columns: minmax(0, 1fr); } }";
-defineHub("sw-hub-bacteria", CONTENT_BACTERIA, CSS);
+defineHub("sw-map-next", CONTENT_MAPNEXT, CSS, { render: renderMapNext, attrs: ['postcode'], onAttr: (n, v, root) => { if (n === 'postcode') runPostcode(root, CONTENT_MAPNEXT, v, null); } });
 })();
