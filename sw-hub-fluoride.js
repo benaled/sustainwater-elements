@@ -694,6 +694,10 @@ const FL_PRODUCTS = pick('fluoride', 'clfl', 'complete');
 const KIT_STRIPS_WHITE_F = KIT_STRIPS_SVG.replace(/#0046B8/g, '#FFFFFF');
 const F = SU.dwiFluoride;
 const OHF = SU.ohfFluoride;
+/* Added 29 Sep 2026: North East expansion and the other UK nations (quotes checked word for word 29 Sep 2026). */
+const GOV_NE = 'https://www.gov.uk/government/consultations/community-water-fluoridation-expansion-in-the-north-east-of-england/outcome/consultation-on-community-water-fluoridation-expansion-in-the-north-east-of-england-government-response';
+const DWQR_F = 'https://dwqr.scot/public-water-supply/drinking-water-quality-faqs/fluoride/';
+const NIW_F = 'https://www.niwater.com/media/5xilyoiw/2425512.pdf';
 
 const FL_HERO_SVG = `<svg viewBox="0 0 480 380" fill="none" stroke="#0046B8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Diagram: fluoride occurs naturally in rocks and groundwater. At some treatment works fluoride is added. Water travels to the home, where the legal limit applies at the tap. Tea and toothpaste are other everyday sources.">
 <path d="M0 200 H480"/>
@@ -732,6 +736,8 @@ const FCH_WHO = `
 <p class="read">Whether your water is fluoridated is a government decision, not your water company's. ${qi('In England, the decision to fluoridate your water supply is made by the Secretary of State.', 'DWI', F)} ${qi('In Wales, health decisions about fluoridation are taken by the Welsh Government.', 'DWI', F)}</p>
 <p class="read">There is a process: ${qi('When deciding whether to fluoridate the Secretary of State must carry out a consultation exercise, the findings of which must be taken into consideration when reaching a final decision.', 'DWI', F)} ${qi('The law only permits a water company to fluoridate under a contract with the Department of Health and Social Care.', 'DWI', F)}</p>
 <p class="read">The DWI names five companies currently required to fluoridate some or all of their supplies ${src('DWI', F)}: United Utilities, Northumbrian Water, Anglian Water, Severn Trent Water and South Staffordshire Water. The Oral Health Foundation puts the reach at ${qi('In England, about one in ten people have fluoridated water.', 'Oral Health Foundation', OHF)}</p>
+<p class="read">Fluoridation is being extended in the North East. The government's response to its consultation says ${qi('Over 1 million people in the north east currently live in areas with fluoridated water, including in Newcastle upon Tyne and Gateshead, with schemes in place since the early 1970s.', 'DHSC', GOV_NE)} It confirms that ${qi('the Secretary of State for Health and Social Care has decided to expand community water fluoridation in the north east, as proposed.', 'DHSC', GOV_NE)} The proposal covers areas including Tees Valley, County Durham, Sunderland, South Tyneside and parts of Northumberland. The government is working with Northumbrian Water to put it in place. The Fluoride Checker shows today's typical level, not future plans.</p>
+<p class="read">The other UK nations are different. In Scotland, ${qi('Fluoride is not added to any drinking water supply in Scotland.', 'DWQR', DWQR_F)} In Northern Ireland, NI Water says it ${qi('has never artificially fluoridated the public water supply in Northern Ireland.', 'NI Water', NIW_F)} No Welsh water company is on the DWI's list of companies required to fluoridate.</p>
 <p class="note">${icon('info', 2)}<span>Views on fluoridation differ. This page sets out what the regulator says and what the data shows for your area, and leaves the debate to you.</span></p>`;
 
 const FCH_LIMIT = `
@@ -775,6 +781,8 @@ const FL_FAQ = [
   { q: 'Is my tap water fluoridated?', a: `<p>Check your postcode in the Fluoride Checker on this page, or ask your water company. The DWI says ${qi('You can obtain a free copy of the water quality test results for the water supply to your home or workplace by contacting your local water company.', 'DWI', F)}</p>` },
   { q: 'What is the legal limit for fluoride in UK water?', a: `<p>${qi('The maximum permitted value of fluoride in drinking water is 1.5mg/l (milligrams per litre).', 'DWI', F)} It applies to natural and added fluoride.</p>` },
   { q: 'Which water companies add fluoride?', a: `<p>The DWI lists United Utilities, Northumbrian Water, Anglian Water, Severn Trent Water and South Staffordshire Water as currently required to fluoridate some or all of their supplies ${src('DWI', F)}.</p>` },
+  { q: 'Is water fluoridated in Scotland, Wales or Northern Ireland?', a: `<p>${qi('Fluoride is not added to any drinking water supply in Scotland.', 'DWQR', DWQR_F)} NI Water says it ${qi('has never artificially fluoridated the public water supply in Northern Ireland.', 'NI Water', NIW_F)} No Welsh water company is on the DWI's list of companies required to fluoridate ${src('DWI', F)}. Natural fluoride can still be present at low levels.</p>` },
+  { q: 'Is fluoridation being extended in the North East?', a: `<p>Yes. The government says ${qi('the Secretary of State for Health and Social Care has decided to expand community water fluoridation in the north east, as proposed.', 'DHSC', GOV_NE)} The proposal covers areas including Tees Valley, County Durham, Sunderland, South Tyneside and parts of Northumberland, working with Northumbrian Water.</p>` },
   { q: 'Who decides whether water is fluoridated?', a: `<p>${qi('In England, the decision to fluoridate your water supply is made by the Secretary of State.', 'DWI', F)} ${qi('In Wales, health decisions about fluoridation are taken by the Welsh Government.', 'DWI', F)}</p>` },
   { q: 'Is fluoride in water safe?', a: `<p>Views differ, and this page doesn't take a side. The regulator's role is to make sure no supply exceeds 1.5 mg/l. The Oral Health Foundation says ${qi('Fluoride is safe and very effective when used in the right amount.', 'Oral Health Foundation', OHF)}</p>` },
   { q: 'What is dental fluorosis?', a: `<p>${qi('Too much fluoride while teeth are forming can cause dental fluorosis.', 'Oral Health Foundation', OHF)} ${qi('It is usually mild and does not affect how teeth work.', 'Oral Health Foundation', OHF)}</p>` },
@@ -873,7 +881,10 @@ const CONTENT_FLUORIDE = {
   ],
   sources: [
     ['DWI: Fluoridation of drinking water', F],
-    ['Oral Health Foundation: Fluoride', OHF]
+    ['Oral Health Foundation: Fluoride', OHF],
+    ['DHSC: North East fluoridation, government response', GOV_NE],
+    ['DWQR: Fluoride FAQ (Scotland)', DWQR_F],
+    ['NI Water: fluoridation information response, 29 Jan 2025', NIW_F]
   ],
   routing: routingBlock({
     kit: 'fluoride',
